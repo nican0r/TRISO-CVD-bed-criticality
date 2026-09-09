@@ -23,12 +23,21 @@ dimensions:
     vertical_drop: 38.0        # axial drop from nozzle throat plane to retort ID
   nozzle:
     throat_diameter: 6.0       # simplified from 6×ø1.5 mm orifices (same area)
+    nozzle_height: 30.0        # mm; axial height of throat cylinder below cone  # CONFIRM
     # TODO: replace with explicit 6×ø1.5 mm orifice geometry in a later stage
+  injector:
+    gas_throat: 6.0            # mm; gas bore diameter (matches nozzle throat)
+    body_id: 12.0              # mm; OD of inner graphite sleeve (~3 mm wall each side of gas bore)
+    coolant_id: 16.0           # mm; inner wall of water coolant annulus
+    coolant_od: 24.0           # mm; outer wall of water coolant annulus (4 mm channel)
+    body_od: 30.0              # mm; outer wall of injector body (~3 mm wall outside coolant)
+    cooled_length: 60.0        # mm; total cooled extent below cone base (throat + injector body)
   bed:
     static_depth: 35.0         # static bed depth in cone + lower cylinder  # CONFIRM
-    fluidized_height: 180.0    # expanded bed height at operating flow  # CONFIRM
+    fluidized_height: 180.0    # mm; available fluidization zone height (actual bed height computed from charge mass)  # CONFIRM
+    charge_mass_g: 95.0        # g; starting charge; sweep target for max safe mass study  # CONFIRM
   bed_volume:                  # not a length; stored separately to avoid mm→cm confusion
-    static_bulk_cc: 50.0       # cm³; total bulk volume (particles + interstitial void)  # CONFIRM
+    static_bulk_cc: 15.1       # cm³; derived: charge_mass_g / rho_eff at pf_collapsed=0.60  # CONFIRM
 
 triso:
   units: um  # micrometres; load_params() converts to cm (×1e-4)
@@ -47,8 +56,6 @@ materials:
   opyc_density_gcc: 1.87            # g/cm³; same target as IPyC per AGR-1 spec
   graphite_structural_density_gcc: 1.75    # g/cm³; placeholder  # CONFIRM
   graphite_boron_ppm: 0.0                  # ppm B-eq impurity; zero per NCS convention
-  graphite_felt_density_gcc: 0.20          # g/cm³; placeholder  # CONFIRM
-  graphite_felt_thickness_mm: null         # mm; geometry unknown — not yet modelled  # CONFIRM
 
 gas:
   # SiC-step CVD atmosphere: 98 mol% H₂ + 2 mol% MTS (methyltrichlorosilane).
@@ -70,13 +77,15 @@ model:
   # Both effects are non-conservative for Doppler feedback and for thermal
   # scattering; this is a known Stage 0 limitation — see docs/steps/preamble.md.
   fuel_temperature_k: 1500.0      # K; lowest CVD operating temperature  # CONFIRM
-  particles: 1000                  # placeholder; ≥50 000 for production runs
+  particles: 50000                 # ≥50 000 for production runs
   batches: 110
   inactive: 10
+  n_slabs: 8                       # staircase discretisation; converged at n=8 (δk<σ, V_err=16.4%)
   seed: 42                         # deterministic; record in every result file
   # Packing fraction limits.
   # A collapsed or vibration-settled bed can approach max_packing_fraction
   # (random close packing ~0.64); an operating fluidized bed is far below it.
   max_packing_fraction: 0.64       # random close packing; hard upper guard
   packing_fraction_static: 0.60   # settled/vibrated bed  # CONFIRM
-  packing_fraction_fluidized: 0.35 # operating fluidized bed  # CONFIRM
+  packing_fraction_fluidized: 0.075  # derived: pf_collapsed / bed_expansion_ratio; not set directly
+  bed_expansion_ratio: 8.0           # volumetric fluidized/collapsed ratio at operating flow  # CONFIRM
