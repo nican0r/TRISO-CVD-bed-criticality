@@ -1,0 +1,11 @@
+plan/
+cases/
+__pycache__/
+*.pyc
+*.pyo
+results/*.csv
+results/*.png
+results/*.h5
+statepoint.*.h5
+summary.h5
+

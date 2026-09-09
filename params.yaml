@@ -1,0 +1,82 @@
+# NCS CVD Furnace — parameter file (single source of truth)
+#
+# Linear dimensions are stored in the unit noted per section.
+# load_params() converts them to cm and appends _cm-suffixed keys for OpenMC.
+#   mm  → cm  : ×0.1      (retort / heater / cone / bed geometry)
+#   µm  → cm  : ×1e-4     (TRISO layer thicknesses and kernel diameter)
+#
+# Keys marked  # CONFIRM  are placeholders that must be verified against
+# fabrication drawings or process specifications before results are trusted.
+
+dimensions:
+  units: mm  # all values below are millimetres
+  retort:
+    id: 50.0               # inner diameter; from fabrication sketch
+    od: 66.0               # outer diameter
+    height: 340.0          # total height
+  heater:
+    id: 82.0               # inner diameter; concentric with retort
+    od: 94.0               # outer diameter
+    heated_length: 250.0   # axial extent of heated zone
+  cone:
+    included_angle_deg: 60.0   # full included angle (not half-angle)
+    vertical_drop: 38.0        # axial drop from nozzle throat plane to retort ID
+  nozzle:
+    throat_diameter: 6.0       # simplified from 6×ø1.5 mm orifices (same area)
+    # TODO: replace with explicit 6×ø1.5 mm orifice geometry in a later stage
+  bed:
+    static_depth: 35.0         # static bed depth in cone + lower cylinder  # CONFIRM
+    fluidized_height: 180.0    # expanded bed height at operating flow  # CONFIRM
+  bed_volume:                  # not a length; stored separately to avoid mm→cm confusion
+    static_bulk_cc: 50.0       # cm³; total bulk volume (particles + interstitial void)  # CONFIRM
+
+triso:
+  units: um  # micrometres; load_params() converts to cm (×1e-4)
+  kernel_diameter: 425.0     # AGR-1 nominal; Demkowicz et al., NED 329 (2018) 102-111  # CONFIRM
+  buffer_thickness: 100.0    # AGR-1 target; INL/EXT-10-19476 Table 3  # CONFIRM
+  ipyc_thickness: 40.0       # AGR-1 target; INL/EXT-10-19476 Table 3  # CONFIRM
+  sic_thickness: 35.0        # AGR-1 target; INL/EXT-10-19476 Table 3  # CONFIRM
+  opyc_thickness: 40.0       # AGR-1 target; INL/EXT-10-19476 Table 3  # CONFIRM
+
+materials:
+  enrichment_wt_pct: 19.75          # wt% U-235 of total uranium; AGR-1 HALEU spec
+  kernel_density_gcc: 10.5          # g/cm³; AGR-1 target 10.4-10.6; INL/EXT-10-19476
+  buffer_density_gcc: 1.0           # g/cm³; INL/EXT-10-19476 Table 3
+  ipyc_density_gcc: 1.87            # g/cm³; AGR-1 target 1.85-1.90
+  sic_density_gcc: 3.20             # g/cm³; AGR-1 target 3.19; INL/EXT-10-19476 Table 3
+  opyc_density_gcc: 1.87            # g/cm³; same target as IPyC per AGR-1 spec
+  graphite_structural_density_gcc: 1.75    # g/cm³; placeholder  # CONFIRM
+  graphite_boron_ppm: 0.0                  # ppm B-eq impurity; zero per NCS convention
+  graphite_felt_density_gcc: 0.20          # g/cm³; placeholder  # CONFIRM
+  graphite_felt_thickness_mm: null         # mm; geometry unknown — not yet modelled  # CONFIRM
+
+gas:
+  # SiC-step CVD atmosphere: 98 mol% H₂ + 2 mol% MTS (methyltrichlorosilane).
+  # This is the highest-hydrogen composition in the CVD cycle; it is held
+  # constant across all coating steps to bound worst-case moderation for NCS
+  # screening.  Any other CVD atmosphere (propylene/acetylene for carbon layers)
+  # contains less hydrogen and yields a lower k-eff.
+  pressure_pa: 101325.0           # Pa; 1 atm standard  # CONFIRM (sub-atm runs possible)
+  temperature_k: 1873.0           # K; 1600 °C SiC deposition temperature
+  mole_fractions:
+    H2: 0.98
+    CH3SiCl3: 0.02                # methyltrichlorosilane (MTS), SiC precursor
+
+model:
+  # Cross-section note: this library was processed at 900 K and 1200 K only
+  # (ENDF/B-VIII.0, endfb80_hdf5).  OpenMC nearest-temperature method will
+  # silently use 1200 K data for materials set to fuel_temperature_k = 1500 K.
+  # The c_Graphite S(α,β) evaluation is also capped at 1200 K in this library.
+  # Both effects are non-conservative for Doppler feedback and for thermal
+  # scattering; this is a known Stage 0 limitation — see docs/steps/preamble.md.
+  fuel_temperature_k: 1500.0      # K; lowest CVD operating temperature  # CONFIRM
+  particles: 1000                  # placeholder; ≥50 000 for production runs
+  batches: 110
+  inactive: 10
+  seed: 42                         # deterministic; record in every result file
+  # Packing fraction limits.
+  # A collapsed or vibration-settled bed can approach max_packing_fraction
+  # (random close packing ~0.64); an operating fluidized bed is far below it.
+  max_packing_fraction: 0.64       # random close packing; hard upper guard
+  packing_fraction_static: 0.60   # settled/vibrated bed  # CONFIRM
+  packing_fraction_fluidized: 0.35 # operating fluidized bed  # CONFIRM
