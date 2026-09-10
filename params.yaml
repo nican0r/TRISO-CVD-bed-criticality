@@ -37,7 +37,7 @@ dimensions:
     fluidized_height: 250.0    # mm; fluidization zone height — raised from 180 mm placeholder to 250 mm (see docs/steps/step-5-nominal-case.md §Design decisions)  # CONFIRM
     charge_mass_g: 95.0        # g; starting charge; sweep target for max safe mass study  # CONFIRM
   bed_volume:                  # not a length; stored separately to avoid mm→cm confusion
-    static_bulk_cc: 15.1       # cm³; derived: charge_mass_g / rho_eff at pf_collapsed=0.60  # CONFIRM
+    static_bulk_cc: 18.10      # cm³; derived: charge_mass_g / rho_eff / pf_collapsed=0.50  # CONFIRM
 
 triso:
   units: um  # micrometres; load_params() converts to cm (×1e-4)

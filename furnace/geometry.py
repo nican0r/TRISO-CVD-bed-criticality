@@ -145,11 +145,18 @@ def _particle_effective_density(stage, params):
     return m / _shell_vol(r_out)
 
 
+def _flood_fill(z_bot, wet, dry, z_flood):
+    """Select wet or dry material based on whether z_bot is below the flood level."""
+    if z_flood is None or dry is None:
+        return wet
+    return wet if z_bot < z_flood else dry
+
+
 # ---------------------------------------------------------------------------
 # Bed region assembly
 # ---------------------------------------------------------------------------
 
-def bed_region(params, state, stage, n_slabs, background_material, charge_mass_g=None, seed=None):
+def bed_region(params, state, stage, n_slabs, background_material, charge_mass_g=None, seed=None, z_flood=None, dry_material=None):
     """Assemble the particle bed for the given state and deposition stage.
 
     Parameters
@@ -162,10 +169,15 @@ def bed_region(params, state, stage, n_slabs, background_material, charge_mass_g
     charge_mass_g       : total particle charge mass (g). If None, reads from
                           params['dimensions']['bed']['charge_mass_g'].
                           Pass explicitly to sweep charge mass without mutating params.
+    z_flood             : absolute z (cm) of the bottom-up flood level. Cells whose
+                          bottom face is below z_flood receive background_material (wet);
+                          cells above receive dry_material. None → uniform background.
+    dry_material        : openmc.Material used above z_flood (typically process_gas).
+                          Ignored when z_flood is None.
 
     Packing fractions:
-        collapsed  : params['model']['packing_fraction_static']   (~0.60)
-        fluidized  : pf_static / bed_expansion_ratio               (~0.075)
+        collapsed  : params['model']['packing_fraction_static']   (~0.50)
+        fluidized  : pf_static / bed_expansion_ratio               (~0.0625)
 
     Both states use the same inscribed staircase geometry: cone slabs filled from
     bottom to top at the state's packing fraction, then overflow into the retort
@@ -272,6 +284,7 @@ def bed_region(params, state, stage, n_slabs, background_material, charge_mass_g
         zp_top_s = openmc.ZPlane(z0=z_fill_top)
 
         # Bed cell: inscribed cylinder packed with particles
+        slab_fill = _flood_fill(z_bot, background_material, dry_material, z_flood)
         region = -cyl & +zp_bot_s & -zp_top_s
         seed = base_seed + slab_index
         trisos = pack_bed(region, pf, outer_r, fill_univ, seed, params)
@@ -279,7 +292,7 @@ def bed_region(params, state, stage, n_slabs, background_material, charge_mass_g
             trisos,
             lower_left=(-r_slab, -r_slab, z_bot),
             upper_right=(r_slab, r_slab, z_fill_top),
-            background_material=background_material,
+            background_material=slab_fill,
             pitch_target=pitch_target,
         )
         all_cells.append(openmc.Cell(fill=lattice, region=region))
@@ -292,22 +305,37 @@ def bed_region(params, state, stage, n_slabs, background_material, charge_mass_g
         # required so every point inside the cone is covered by exactly one cell.
         annular_region = +cyl & -_cone_surf & +zp_bot_s & -zp_top_s
         cone_void_cells.append(
-            openmc.Cell(fill=background_material, region=annular_region)
+            openmc.Cell(fill=slab_fill, region=annular_region)
         )
 
         z_last_fill_top = z_fill_top
         remaining_bulk -= used_vol
         slab_index += 1
 
-    # Unfilled cone interior above bed (if the charge doesn't fill the full cone)
+    # Unfilled cone interior above bed (if the charge doesn't fill the full cone).
+    # When z_flood falls inside this region, split exactly at z_flood so the flood
+    # level is accurate (avoids the slab-height over-approximation for this void).
     if z_last_fill_top < z_cone_top - 1e-10:
         zp_bed_last = openmc.ZPlane(z0=z_last_fill_top)
-        cone_void_cells.append(
-            openmc.Cell(
-                fill=background_material,
-                region=-_cone_surf & +zp_bed_last & -_zp_cone_top,
+        if (z_flood is not None and dry_material is not None
+                and z_last_fill_top < z_flood < z_cone_top):
+            zp_flood_in_cone = openmc.ZPlane(z0=z_flood)
+            cone_void_cells.append(
+                openmc.Cell(fill=background_material,
+                            region=-_cone_surf & +zp_bed_last & -zp_flood_in_cone)
             )
-        )
+            cone_void_cells.append(
+                openmc.Cell(fill=dry_material,
+                            region=-_cone_surf & +zp_flood_in_cone & -_zp_cone_top)
+            )
+        else:
+            void_fill = _flood_fill(z_last_fill_top, background_material, dry_material, z_flood)
+            cone_void_cells.append(
+                openmc.Cell(
+                    fill=void_fill,
+                    region=-_cone_surf & +zp_bed_last & -_zp_cone_top,
+                )
+            )
 
     # Overflow into retort cylinder above cone if charge exceeds staircase volume
     if remaining_bulk > 1e-10:
@@ -327,13 +355,14 @@ def bed_region(params, state, stage, n_slabs, background_material, charge_mass_g
         zp_ov_top = openmc.ZPlane(z0=z_ov_top)
         region_ov = -cyl_ret & +zp_ov_bot & -zp_ov_top
 
+        ov_fill = _flood_fill(z_ov_bot, background_material, dry_material, z_flood)
         seed = base_seed + slab_index
         trisos_ov = pack_bed(region_ov, pf, outer_r, fill_univ, seed, params)
         lattice_ov = lattice_bed(
             trisos_ov,
             lower_left=(-r_retort, -r_retort, z_ov_bot),
             upper_right=(r_retort, r_retort, z_ov_top),
-            background_material=background_material,
+            background_material=ov_fill,
             pitch_target=pitch_target,
         )
         all_cells.append(openmc.Cell(fill=lattice_ov, region=region_ov))
@@ -432,12 +461,16 @@ def outer_boundary_surfaces(params):
     """Return (radial_cyl, z_top, z_bot) vacuum boundary surfaces.
 
     Radial: heater OD (graphite felt insulation removed per step 4 revision).
-    Top:    retort top (z_cone_top + retort cylinder height).
+    Top:    top face of graphite retort cap (z_cone_top + retort height + cap thickness).
+            Cap thickness equals the cylindrical wall thickness (od − id) / 2.
     Bottom: bottom of injector body (−cooled_length).
     """
     dim = params['dimensions']
-    r_out = dim['heater']['od_cm'] / 2.0
-    z_top = dim['cone']['vertical_drop_cm'] + dim['retort']['height_cm']
+    r_out     = dim['heater']['od_cm'] / 2.0
+    r_ret_in  = dim['retort']['id_cm'] / 2.0
+    r_ret_out = dim['retort']['od_cm'] / 2.0
+    t_wall    = r_ret_out - r_ret_in
+    z_top = dim['cone']['vertical_drop_cm'] + dim['retort']['height_cm'] + t_wall
     z_bot = -dim['injector']['cooled_length_cm']
     return (
         openmc.ZCylinder(r=r_out, boundary_type='vacuum'),
@@ -482,12 +515,14 @@ def furnace_shell_cells(params, graphite, water):
     dim = params['dimensions']
 
     # Derived scalars
-    z_ct   = dim['cone']['vertical_drop_cm']
-    z_rt   = z_ct + dim['retort']['height_cm']
-    h_th   = dim['nozzle']['nozzle_height_cm']   # nozzle plate height
-    h_cl   = dim['injector']['cooled_length_cm']
+    z_ct      = dim['cone']['vertical_drop_cm']
+    z_rt      = z_ct + dim['retort']['height_cm']
+    h_th      = dim['nozzle']['nozzle_height_cm']   # nozzle plate height
+    h_cl      = dim['injector']['cooled_length_cm']
     r_ret_in  = dim['retort']['id_cm'] / 2.0
     r_ret_out = dim['retort']['od_cm'] / 2.0
+    t_wall    = r_ret_out - r_ret_in    # wall thickness = top cap thickness
+    z_cap_top = z_rt + t_wall           # outer (vacuum) face of the top cap
     r_hi   = dim['heater']['id_cm'] / 2.0
     r_ho   = dim['heater']['od_cm'] / 2.0
     r_thr  = dim['nozzle']['throat_diameter_cm'] / 2.0
@@ -518,9 +553,10 @@ def furnace_shell_cells(params, graphite, water):
     s_inj_co  = openmc.ZCylinder(r=r_inj_co)
     s_inj_bo  = openmc.ZCylinder(r=r_inj_bo)
 
-    zp_ct = openmc.ZPlane(z0=z_ct)
-    zp_rt = openmc.ZPlane(z0=z_rt, boundary_type='vacuum')
-    zp_ht = openmc.ZPlane(z0=z_ct + h_heat)
+    zp_ct      = openmc.ZPlane(z0=z_ct)
+    zp_rt      = openmc.ZPlane(z0=z_rt)                             # retort interior top
+    zp_cap_top = openmc.ZPlane(z0=z_cap_top, boundary_type='vacuum')  # outer cap face
+    zp_ht      = openmc.ZPlane(z0=z_ct + h_heat)
     zp_cb = openmc.ZPlane(z0=0.0)           # cone base = nozzle plate top
     zp_tb = openmc.ZPlane(z0=-h_th)         # nozzle plate bottom = injector body top
     zp_ib = openmc.ZPlane(z0=-h_cl, boundary_type='vacuum')
@@ -559,11 +595,19 @@ def furnace_shell_cells(params, graphite, water):
         )
     ]
 
+    retort_top_cap = [
+        openmc.Cell(
+            name='retort_top_cap',
+            fill=graphite,
+            region=-s_cyl_ret_out & +zp_rt & -zp_cap_top,
+        )
+    ]
+
     exterior_void = [
         openmc.Cell(
             name='void_above_heater',
             fill=None,
-            region=+s_cyl_ret_out & -s_cyl_ho & +zp_ht & -zp_rt,
+            region=+s_cyl_ret_out & -s_cyl_ho & +zp_ht & -zp_cap_top,
         ),
         openmc.Cell(
             name='void_outside_cone',
@@ -616,21 +660,22 @@ def furnace_shell_cells(params, graphite, water):
     ]
 
     all_cells = (
-        retort_wall + cone_wall + vacuum_gap + heater
+        retort_wall + retort_top_cap + cone_wall + vacuum_gap + heater
         + exterior_void + nozzle + injector
     )
 
     return {
-        'retort_wall':   retort_wall,
-        'cone_wall':     cone_wall,
-        'vacuum_gap':    vacuum_gap,
-        'heater':        heater,
-        'exterior_void': exterior_void,
-        'nozzle':        nozzle,
-        'injector':      injector,
+        'retort_wall':    retort_wall,
+        'retort_top_cap': retort_top_cap,
+        'cone_wall':      cone_wall,
+        'vacuum_gap':     vacuum_gap,
+        'heater':         heater,
+        'exterior_void':  exterior_void,
+        'nozzle':         nozzle,
+        'injector':       injector,
         'boundary_surfaces': {
             'radial': s_cyl_ho,
-            'top':    zp_rt,
+            'top':    zp_cap_top,
             'bottom': zp_ib,
         },
         'all': all_cells,

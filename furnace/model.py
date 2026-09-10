@@ -49,6 +49,9 @@ def build_model(
     state: str = 'fluidized',
     stage: str = 'bare_kernel',
     background: str = 'gas',
+    flood_extent: str = 'none',
+    z_flood: float | None = None,
+    water_density_gcc: float = 1.0,
     n_inactive: int | None = None,
     n_active: int | None = None,
     n_particles: int | None = None,
@@ -62,7 +65,14 @@ def build_model(
     params        : frozen params dict from load_params()
     state         : 'fluidized' (nominal) or 'collapsed'
     stage         : TRISO deposition stage; 'bare_kernel' for nominal
-    background    : 'gas' (nominal CVD atmosphere) or 'water' (flooding case)
+    background       : 'gas' (nominal CVD atmosphere) or 'water' (legacy full-retort flood)
+    flood_extent     : 'none' | 'bed_and_cone' | 'full_retort' — where water fills
+                       'bed_and_cone': water in bed interstitials + cone void, gas above bed
+                       'full_retort':  water everywhere inside the retort (= background='water')
+    z_flood          : bottom-up flood level (cm, absolute z). When set, all bed/cone cells
+                       whose z_bot < z_flood receive water; cells above receive gas.
+                       The gas-above-bed cell is also split at z_flood if needed.
+    water_density_gcc: density of flood water (g/cm³); default 1.0 (liquid)
     n_inactive    : inactive batches; defaults to params['model']['inactive']
     n_active      : active batches; defaults to params['model']['batches'] - inactive
     n_particles   : particles per batch; defaults to params['model']['particles']
@@ -88,9 +98,16 @@ def build_model(
     sic_mat    = _sic(params)
     opyc_mat   = _opyc(params)
     graph_mat  = _graphite_structural(params)
-    water_mat  = _water(1.0)
+    water_mat  = _water(water_density_gcc)
     gas_mat    = _process_gas(params)
-    fill_mat   = water_mat if background == 'water' else gas_mat
+
+    # Determine which material fills the bed (interstitials + cone voids) and
+    # the open retort space above the bed.
+    # legacy: background='water' ≡ flood_extent='full_retort'
+    _full_flood = flood_extent == 'full_retort' or background == 'water'
+    _any_flood  = flood_extent in ('bed_and_cone', 'full_retort') or _full_flood or z_flood is not None
+    bed_fill    = water_mat if _any_flood else gas_mat
+    above_fill  = water_mat if _full_flood else gas_mat
 
     # ── Bed ──────────────────────────────────────────────────────────────────
     bed = bed_region(
@@ -98,9 +115,11 @@ def build_model(
         state=state,
         stage=stage,
         n_slabs=int(mdl['n_slabs']),
-        background_material=fill_mat,
+        background_material=bed_fill,
         charge_mass_g=charge_mass_g,
         seed=_seed,
+        z_flood=z_flood,
+        dry_material=gas_mat if z_flood is not None else None,
     )
 
     # ── Furnace shell ─────────────────────────────────────────────────────────
@@ -113,22 +132,39 @@ def build_model(
     z_bed_top_val = bed['bed_height_cm']    # absolute z of bed top
     z_bed_bot     = bed['z_bed_bot_cm']     # 0.0: bed starts at cone base
 
-    # Gas fills the retort cylinder above the bed.  The retort cylinder only
-    # exists above z_ct, so start the gas cell there even if bed_top < z_ct.
+    # Gas (or water) fills the retort cylinder above the bed.  The retort cylinder
+    # only exists above z_ct, so start the cell there even if bed_top < z_ct.
     z_gas_above_bot = max(z_bed_top_val, z_ct)
 
     cyl_ret_in       = openmc.ZCylinder(r=r_ret_in)
     zp_gas_above_bot = openmc.ZPlane(z0=z_gas_above_bot)
-    zp_rt_top        = openmc.ZPlane(z0=z_rt, boundary_type='vacuum')
+    zp_rt_top        = openmc.ZPlane(z0=z_rt)   # interior top; vacuum is the graphite cap above
 
-    gas_above = openmc.Cell(
-        name='gas_above_bed',
-        fill=fill_mat,
-        region=-cyl_ret_in & +zp_gas_above_bot & -zp_rt_top,
-    )
+    # For bottom-up flood: split the above-bed cell at z_flood if the flood
+    # level extends into the gas region.
+    if z_flood is not None and z_flood > z_gas_above_bot:
+        z_flood_capped = min(z_flood, z_rt)
+        if z_flood_capped < z_rt:
+            zp_flood_lvl = openmc.ZPlane(z0=z_flood_capped)
+            gas_cells = [
+                openmc.Cell(name='flood_above_bed', fill=water_mat,
+                            region=-cyl_ret_in & +zp_gas_above_bot & -zp_flood_lvl),
+                openmc.Cell(name='gas_above_bed', fill=gas_mat,
+                            region=-cyl_ret_in & +zp_flood_lvl & -zp_rt_top),
+            ]
+        else:
+            gas_cells = [
+                openmc.Cell(name='gas_above_bed', fill=water_mat,
+                            region=-cyl_ret_in & +zp_gas_above_bot & -zp_rt_top),
+            ]
+    else:
+        gas_cells = [
+            openmc.Cell(name='gas_above_bed', fill=above_fill,
+                        region=-cyl_ret_in & +zp_gas_above_bot & -zp_rt_top),
+        ]
 
     # ── Geometry ──────────────────────────────────────────────────────────────
-    all_cells = bed['cells'] + bed['cone_void_cells'] + [gas_above] + shell['all']
+    all_cells = bed['cells'] + bed['cone_void_cells'] + gas_cells + shell['all']
     root_univ = openmc.Universe(cells=all_cells)
     geometry  = openmc.Geometry(root_univ)
 
@@ -200,7 +236,7 @@ def build_model(
         'default': 900.0,
         'range':   [250.0, 3000.0],
     }
-    # UCO kernels occupy ~0.72% of the source Box volume (pf=0.075 × kernel fraction
+    # UCO kernels occupy ~0.72% of the source Box volume (pf=0.0625 × kernel fraction
     # 0.123 × π/4 box-to-cylinder ratio).  The default source_rejection_fraction=0.05
     # (5%) would reject our valid geometry.  Setting to 0.005 allows acceptance rates
     # down to 0.5% — comfortably above the 0.72% actual rate.
@@ -211,7 +247,7 @@ def build_model(
     # particle_at_stage() creates its own material instances (different IDs from
     # kernel_mat/buf_mat/… above), so look them up from the geometry by name.
     _mat_by_name = {m.name: m for m in all_mats}
-    _fill_name   = fill_mat.name   # 'process_gas' or 'water_…'
+    _fill_name   = bed_fill.name   # 'process_gas' or 'water_…'
     _bed_names   = ['uco_kernel', 'buffer_pyc', 'ipyc', 'sic', 'opyc',
                     _fill_name, 'graphite_structural']
     bed_mat_list = [_mat_by_name[n] for n in _bed_names if n in _mat_by_name]

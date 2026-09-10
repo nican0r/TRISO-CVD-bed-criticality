@@ -247,9 +247,9 @@ def pack_bed(region, packing_fraction, outer_radius, fill_universe, seed, params
     non-convex regions that share a bounding box with a different shape, pass
     distinct seeds or verify manually that the cached geometry is appropriate.
 
-    An operating fluidised bed runs well below max_packing_fraction (~0.35);
-    a vibration-settled or collapsed bed can approach the random close-packing
-    limit of 0.64.
+    An operating fluidised bed runs at packing_fraction_fluidized (~0.0625);
+    a gravity-settled collapsed bed uses packing_fraction_static (~0.50), well
+    below the random close-packing limit of 0.64.
     """
     max_pf = params['model']['max_packing_fraction']
     if packing_fraction > max_pf:

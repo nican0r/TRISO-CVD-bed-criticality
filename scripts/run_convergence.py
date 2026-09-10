@@ -7,7 +7,7 @@ sigma relative to the next-finer run.
 Geometry note — homogenised materials
 --------------------------------------
 This script uses homogenised (smeared) materials instead of explicit TRISO packing.
-Explicit packing at pf_collapsed = 0.60 requires placing tens of thousands of
+Explicit packing at pf_collapsed = 0.50 requires placing tens of thousands of
 particles per slab and can take many hours; homogenisation gives the same geometry
 sensitivity in minutes. Each slab cell is filled with an openmc.Material.mix_materials
 blend of UCO kernel + background water at the correct volume fraction (pf_static from
