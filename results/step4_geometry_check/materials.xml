@@ -1,0 +1,30 @@
+<?xml version='1.0' encoding='utf-8'?>
+<materials>
+  <material id="1" name="graphite_structural" temperature="293.6">
+    <density value="1.75" units="g/cm3"/>
+    <nuclide name="C12" ao="0.988922"/>
+    <nuclide name="C13" ao="0.011078"/>
+    <sab name="c_Graphite"/>
+  </material>
+  <material id="2" name="water_1.0000gcc" temperature="293.6">
+    <density value="1.0" units="g/cm3"/>
+    <nuclide name="H1" ao="1.99968852"/>
+    <nuclide name="H2" ao="0.00031148"/>
+    <nuclide name="O16" ao="0.9976206"/>
+    <nuclide name="O17" ao="0.000379"/>
+    <nuclide name="O18" ao="0.0020004"/>
+    <sab name="c_H_in_H2O"/>
+  </material>
+  <material id="3" name="process_gas" temperature="293.6">
+    <density value="3.230638721222988e-05" units="g/cm3"/>
+    <nuclide name="H1" ao="2.0196854052"/>
+    <nuclide name="H2" ao="0.0003145948"/>
+    <nuclide name="C12" ao="0.01977844"/>
+    <nuclide name="C13" ao="0.00022155999999999999"/>
+    <nuclide name="Si28" ao="0.018445936"/>
+    <nuclide name="Si29" ao="0.0009366320000000001"/>
+    <nuclide name="Si30" ao="0.000617432"/>
+    <nuclide name="Cl35" ao="0.04545882"/>
+    <nuclide name="Cl37" ao="0.01454118"/>
+  </material>
+</materials>

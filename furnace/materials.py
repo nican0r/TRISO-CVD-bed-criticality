@@ -107,16 +107,6 @@ def graphite_structural(params: types.MappingProxyType) -> openmc.Material:
     return m
 
 
-def graphite_felt_insulation(params: types.MappingProxyType) -> openmc.Material:
-    """Low-density graphite felt insulation. Density placeholder — see params.yaml # CONFIRM."""
-    m = openmc.Material(name='graphite_felt_insulation')
-    m.set_density('g/cm3', params['materials']['graphite_felt_density_gcc'])
-    m.add_element('C', 1.0, percent_type='ao')
-    m.add_s_alpha_beta('c_Graphite')
-    m.temperature = _ROOM_TEMP_K
-    return m
-
-
 def process_gas(params: types.MappingProxyType) -> openmc.Material:
     """CVD process gas: H2 (98 mol%) + MTS/CH3SiCl3 (2 mol%).
 
@@ -274,7 +264,6 @@ if __name__ == '__main__':
         sic(params),
         opyc(params),
         graphite_structural(params),
-        graphite_felt_insulation(params),
         process_gas(params),
         water(1.0),
         air(),

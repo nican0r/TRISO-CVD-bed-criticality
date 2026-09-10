@@ -23,7 +23,7 @@ dimensions:
     vertical_drop: 38.0        # axial drop from nozzle throat plane to retort ID
   nozzle:
     throat_diameter: 6.0       # simplified from 6×ø1.5 mm orifices (same area)
-    nozzle_height: 30.0        # mm; axial height of throat cylinder below cone  # CONFIRM
+    nozzle_height: 15.0        # mm; axial height of graphite bore cap below cone  # CONFIRM
     # TODO: replace with explicit 6×ø1.5 mm orifice geometry in a later stage
   injector:
     gas_throat: 6.0            # mm; gas bore diameter (matches nozzle throat)

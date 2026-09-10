@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<plots>
+  <!--full_model-->
+  <plot id="1" name="full_model" filename="full_model_xz" color_by="material" type="slice" basis="xz">
+    <pixels>550 2290</pixels>
+    <origin>0.0 0.0 15.899999999999999</origin>
+    <width>11.0 45.8</width>
+  </plot>
+  <!--cone_injector_zoom-->
+  <plot id="2" name="cone_injector_zoom" filename="cone_injector_xz" color_by="material" type="slice" basis="xz">
+    <pixels>550 700</pixels>
+    <origin>0.0 0.0 0.0</origin>
+    <width>11.0 14.0</width>
+  </plot>
+</plots>
