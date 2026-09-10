@@ -343,32 +343,47 @@ def main():
     results_dir = _REPO_ROOT / 'results'
     results_dir.mkdir(exist_ok=True)
 
+    # Analytic frustum volume and total bulk volume — both fixed for all n_slabs.
+    dim = params['dimensions']
+    r_throat = dim['nozzle']['throat_diameter_cm'] / 2.0
+    r_retort  = dim['retort']['id_cm'] / 2.0
+    half_angle = dim['cone']['included_angle_deg'] / 2.0
+    v_frustum = frustum_volume(r_retort, r_throat, half_angle_deg=half_angle)
+
+    charge_mass_g = float(dim['bed']['charge_mass_g'])
+    pf_static = float(params['model']['packing_fraction_static'])
+    rho_eff = particle_mass_g('bare_kernel', params) / _shell_vol(
+        _stage_outer_radius('bare_kernel', params)
+    )
+    v_bulk = (charge_mass_g / rho_eff) / pf_static
+
     rows = []
     k_results = {}
 
     print(
         f"\n{'n_slabs':>8} {'V_stair(cm³)':>13} {'V_err(%)':>9} "
-        f"{'k_eff':>8} {'sigma':>8} {'δk_disc':>9}"
+        f"{'ΔV/V_bulk(%)':>13} {'k_eff':>8} {'δk_disc':>12}"
     )
-    print('-' * 62)
+    print('-' * 70)
 
     for n_slabs in n_slabs_list:
         run_dir = _REPO_ROOT / 'cases' / f'convergence_n{n_slabs}'
         k_eff, sigma, stair_vol, vol_err_frac = _build_and_run(params, n_slabs, bg_mat, run_dir)
 
         vol_err_pct = vol_err_frac * 100.0
+        dv_pct = (v_frustum - stair_vol) / v_bulk * 100.0
         k_results[n_slabs] = (k_eff, sigma)
         rows.append({
             'n_slabs': n_slabs,
             'V_staircase_cm3': round(stair_vol, 4),
             'V_error_pct': round(vol_err_pct, 3),
+            'dV_over_Vbulk_pct': round(dv_pct, 3),
             'k_eff': round(k_eff, 5),
-            'sigma': round(sigma, 5),
             'dk_disc': None,
         })
         print(
             f"{n_slabs:>8} {stair_vol:>13.4f} {vol_err_pct:>9.3f} "
-            f"{k_eff:>8.5f} {sigma:>8.5f}       —"
+            f"{dv_pct:>13.3f} {k_eff:>8.5f}            —"
         )
 
     # δk_disc(n) = |k(n) − k(2n)| for each consecutive doubling
@@ -377,20 +392,20 @@ def main():
         n2 = rows[i + 1]['n_slabs']
         if n2 == 2 * n:
             dk = abs(k_results[n][0] - k_results[n2][0])
-            row['dk_disc'] = round(dk, 5)
+            row['dk_disc'] = dk
 
     print('\n--- Updated table with δk_disc ---')
     print(
         f"{'n_slabs':>8} {'V_stair(cm³)':>13} {'V_err(%)':>9} "
-        f"{'k_eff':>8} {'sigma':>8} {'δk_disc':>9}"
+        f"{'ΔV/V_bulk(%)':>13} {'k_eff':>8} {'δk_disc':>12}"
     )
-    print('-' * 62)
+    print('-' * 70)
     for row in rows:
-        dk_str = f"{row['dk_disc']:.5f}" if row['dk_disc'] is not None else '      —'
+        dk_str = f"{row['dk_disc']:.2e}" if row['dk_disc'] is not None else '           —'
         print(
             f"{row['n_slabs']:>8} {row['V_staircase_cm3']:>13.4f} "
             f"{row['V_error_pct']:>9.3f} "
-            f"{row['k_eff']:>8.5f} {row['sigma']:>8.5f} {dk_str:>9}"
+            f"{row['dV_over_Vbulk_pct']:>13.3f} {row['k_eff']:>8.5f} {dk_str:>12}"
         )
 
     csv_path = results_dir / 'convergence_n_slabs.csv'
@@ -400,17 +415,9 @@ def main():
         writer.writerows(rows)
     print(f'\nResults saved to {csv_path}')
 
-    print('\nConvergence criterion: δk_disc < 1σ (of finer run)')
-    for i, row in enumerate(rows[:-1]):
-        if row['dk_disc'] is not None:
-            sigma_finer = rows[i + 1]['sigma']
-            status = 'PASS' if row['dk_disc'] < sigma_finer else 'FAIL'
-            n = row['n_slabs']
-            n2 = rows[i + 1]['n_slabs']
-            print(
-                f"  n={n}→{n2}: δk={row['dk_disc']:.5f}, "
-                f"σ_finer={sigma_finer:.5f} → {status}"
-            )
+    print(f'\nV_frustum (analytic) = {v_frustum:.4f} cm³')
+    print(f'V_bulk               = {v_bulk:.4f} cm³')
+    print('ΔV/V_bulk = (V_frustum − V_staircase) / V_bulk: fraction of total inventory mislocated from cone to cylinder.')
     print(
         '\nNote: k-eff values use homogenised materials (no TRISO self-shielding).'
         '\nAbsolute values are not physically accurate; relative δk_disc is the deliverable.'

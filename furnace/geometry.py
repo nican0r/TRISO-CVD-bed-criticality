@@ -149,7 +149,7 @@ def _particle_effective_density(stage, params):
 # Bed region assembly
 # ---------------------------------------------------------------------------
 
-def bed_region(params, state, stage, n_slabs, background_material, charge_mass_g=None):
+def bed_region(params, state, stage, n_slabs, background_material, charge_mass_g=None, seed=None):
     """Assemble the particle bed for the given state and deposition stage.
 
     Parameters
@@ -167,6 +167,12 @@ def bed_region(params, state, stage, n_slabs, background_material, charge_mass_g
         collapsed  : params['model']['packing_fraction_static']   (~0.60)
         fluidized  : pf_static / bed_expansion_ratio               (~0.075)
 
+    Both states use the same inscribed staircase geometry: cone slabs filled from
+    bottom to top at the state's packing fraction, then overflow into the retort
+    cylinder. For the fluidized state the overflow height is checked against
+    fluidized_height_cm (available cylinder zone). The cone interior is never
+    left empty of particles unless the charge mass is too small to reach the top.
+
     Volume computation (mass-conserving):
         rho_eff = m_particle / V_particle   (stage-dependent)
         V_solid = charge_mass_g / rho_eff   (conserved solid volume)
@@ -180,7 +186,8 @@ def bed_region(params, state, stage, n_slabs, background_material, charge_mass_g
         'pf_achieved'    : achieved packing fraction (n_particles * V_particle / V_bulk)
         'V_bulk_cm3'     : bulk volume used
         'V_solid_cm3'    : solid particle volume
-        'bed_height_cm'  : axial extent of bed
+        'bed_height_cm'  : absolute z of bed top
+        'z_bed_bot_cm'   : absolute z of bed bottom (always 0.0 — cone base)
         'n_particles'    : total number of particles packed
         'background_mat' : background_material (passed through for model assembly)
     """
@@ -210,9 +217,13 @@ def bed_region(params, state, stage, n_slabs, background_material, charge_mass_g
 
     outer_r = _stage_outer_radius(stage, params)
     fill_univ, _ = particle_at_stage(stage, params)
-    pitch_target = 4.0 * outer_r
+    # pitch_target: aim for ~1 particle per lattice cell, but cap at 0.20 cm.
+    # 4×r for bare_kernel (r≈0.021 cm) → 0.085 cm → 275 k-cell overflow lattice → 211 MB XML.
+    # Cap at 0.20 cm keeps the overflow lattice ≈ 25×25×34 ≈ 21 k cells → ~16 MB XML,
+    # with ~10-40 particles/cell — acceptable for tracking in a deeply subcritical geometry.
+    pitch_target = max(4.0 * outer_r, 0.20)
 
-    base_seed = int(mdl['seed'])
+    base_seed = int(seed) if seed is not None else int(mdl['seed'])
 
     all_cells = []
     all_trisos = []
@@ -229,66 +240,8 @@ def bed_region(params, state, stage, n_slabs, background_material, charge_mass_g
     _zp_cone_bot = openmc.ZPlane(z0=0.0)
     _zp_cone_top = openmc.ZPlane(z0=z_cone_top)
 
-    if state == 'fluidized':
-        # Uniform packing in retort cylinder above cone
-        h_bed = V_bulk / (math.pi * r_retort**2)
-        if h_bed > fluidized_height_cm:
-            raise ValueError(
-                f"Fluidized bed height {h_bed:.3f} cm exceeds available zone "
-                f"{fluidized_height_cm:.3f} cm. Reduce charge_mass_g or check bed_expansion_ratio."
-            )
-
-        z_bed_bot = z_cone_top
-        z_bed_top = z_cone_top + h_bed
-
-        cyl = openmc.ZCylinder(r=r_retort)
-        zp_bot = openmc.ZPlane(z0=z_bed_bot)
-        zp_top = openmc.ZPlane(z0=z_bed_top)
-        region = -cyl & +zp_bot & -zp_top
-
-        trisos = pack_bed(region, pf, outer_r, fill_univ, base_seed, params)
-        lattice = lattice_bed(
-            trisos,
-            lower_left=(-r_retort, -r_retort, z_bed_bot),
-            upper_right=(r_retort, r_retort, z_bed_top),
-            background_material=background_material,
-            pitch_target=pitch_target,
-        )
-
-        cell = openmc.Cell(fill=lattice, region=region)
-        all_cells.append(cell)
-        all_trisos.extend(trisos)
-        total_particles = len(trisos)
-
-        n_actual = len(trisos)
-        V_actual = n_actual * _shell_vol(outer_r)
-        pf_achieved = V_actual / V_bulk
-
-        assert pf_achieved <= max_pf, (
-            f"Achieved PF {pf_achieved:.4f} exceeds max_packing_fraction {max_pf:.4f}"
-        )
-
-        # Entire cone interior is background (bed is above the cone)
-        cone_void_cells = [
-            openmc.Cell(
-                fill=background_material,
-                region=-_cone_surf & +_zp_cone_bot & -_zp_cone_top,
-            )
-        ]
-
-        return {
-            'cells': all_cells,
-            'cone_void_cells': cone_void_cells,
-            'trisos': all_trisos,
-            'pf_achieved': pf_achieved,
-            'V_bulk_cm3': V_bulk,
-            'V_solid_cm3': V_solid,
-            'bed_height_cm': h_bed,
-            'n_particles': total_particles,
-            'background_mat': background_material,
-        }
-
-    # --- collapsed state ---
+    # --- staircase fill: cone bottom → top, then overflow into retort cylinder ---
+    # Both states use the same inscribed staircase geometry; the only difference is pf.
     slabs, staircase_vol, vol_error_frac = staircase_bed(params, n_slabs)
 
     remaining_bulk = V_bulk
@@ -359,6 +312,13 @@ def bed_region(params, state, stage, n_slabs, background_material, charge_mass_g
     # Overflow into retort cylinder above cone if charge exceeds staircase volume
     if remaining_bulk > 1e-10:
         h_overflow = remaining_bulk / (math.pi * r_retort**2)
+
+        if state == 'fluidized' and h_overflow > fluidized_height_cm:
+            raise ValueError(
+                f"Fluidized bed overflow height {h_overflow:.3f} cm exceeds available zone "
+                f"{fluidized_height_cm:.3f} cm. Reduce charge_mass_g or check bed_expansion_ratio."
+            )
+
         z_ov_bot = z_cone_top
         z_ov_top = z_cone_top + h_overflow
 
@@ -399,7 +359,8 @@ def bed_region(params, state, stage, n_slabs, background_material, charge_mass_g
         'pf_achieved': pf_achieved,
         'V_bulk_cm3': V_bulk,
         'V_solid_cm3': V_solid,
-        'bed_height_cm': bed_height_cm,
+        'bed_height_cm': bed_height_cm,   # absolute z of bed top
+        'z_bed_bot_cm': 0.0,              # bed always starts at cone base (z=0)
         'n_particles': total_particles,
         'background_mat': background_material,
     }
