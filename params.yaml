@@ -34,7 +34,7 @@ dimensions:
     cooled_length: 60.0        # mm; total cooled extent below cone base (throat + injector body)
   bed:
     static_depth: 35.0         # static bed depth in cone + lower cylinder  # CONFIRM
-    fluidized_height: 180.0    # mm; available fluidization zone height (actual bed height computed from charge mass)  # CONFIRM
+    fluidized_height: 250.0    # mm; fluidization zone height — raised from 180 mm placeholder to 250 mm (see docs/steps/step-5-nominal-case.md §Design decisions)  # CONFIRM
     charge_mass_g: 95.0        # g; starting charge; sweep target for max safe mass study  # CONFIRM
   bed_volume:                  # not a length; stored separately to avoid mm→cm confusion
     static_bulk_cc: 15.1       # cm³; derived: charge_mass_g / rho_eff at pf_collapsed=0.60  # CONFIRM
@@ -77,9 +77,9 @@ model:
   # Both effects are non-conservative for Doppler feedback and for thermal
   # scattering; this is a known Stage 0 limitation — see docs/steps/preamble.md.
   fuel_temperature_k: 1500.0      # K; lowest CVD operating temperature  # CONFIRM
-  particles: 50000                 # ≥50 000 for production runs
-  batches: 110
-  inactive: 10
+  particles: 20000                 # Step-5 starting value; raise after convergence study confirms sufficiency
+  batches: 300                     # 50 inactive + 250 active; step-5 production setting
+  inactive: 50                     # raised from 10 to 50 for step-5 convergence discipline
   n_slabs: 8                       # staircase discretisation; converged at n=8 (δk<σ, V_err=16.4%)
   seed: 42                         # deterministic; record in every result file
   # Packing fraction limits.

@@ -1,0 +1,38 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<tallies>
+  <mesh id="2">
+    <dimension>1 1 1</dimension>
+    <lower_left>-2.5 -2.5 0.0</lower_left>
+    <upper_right>2.5 2.5 2.3514072619395185</upper_right>
+  </mesh>
+  <mesh id="3">
+    <dimension>20 20 30</dimension>
+    <lower_left>-2.5 -2.5 0.0</lower_left>
+    <upper_right>2.5 2.5 2.3514072619395185</upper_right>
+  </mesh>
+  <filter id="1" type="mesh">
+    <bins>2</bins>
+  </filter>
+  <filter id="2" type="energy">
+    <bins>0.0 0.625 1000000.0 20000000.0</bins>
+  </filter>
+  <filter id="3" type="material">
+    <bins>9 8 6</bins>
+  </filter>
+  <filter id="4" type="mesh">
+    <bins>3</bins>
+  </filter>
+  <tally id="1" name="flux_spectrum_bed">
+    <filters>1 2</filters>
+    <scores>flux</scores>
+  </tally>
+  <tally id="2" name="reaction_rates_by_material">
+    <filters>3</filters>
+    <scores>fission absorption</scores>
+  </tally>
+  <tally id="3" name="u235_fission_spatial">
+    <filters>4</filters>
+    <nuclides>U235</nuclides>
+    <scores>fission</scores>
+  </tally>
+</tallies>

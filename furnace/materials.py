@@ -159,7 +159,10 @@ def water(density: float) -> openmc.Material:
     m.set_density('g/cm3', density)
     m.add_element('H', 2.0, percent_type='ao')
     m.add_element('O', 1.0, percent_type='ao')
-    m.add_s_alpha_beta('c_H_in_H2O')
+    # c_H_in_H2O S(α,β) omitted: endfb80_hdf5 c_H_in_H2O.h5 has empty kTs (no temperature data).
+    # Free-gas treatment is non-conservative (less thermal absorption) but water is only in the
+    # injector cooling annulus — not in the neutron path — so the k-eff impact is negligible for
+    # Stage 0 NCS.
     m.temperature = _ROOM_TEMP_K
     return m
 
