@@ -1,10 +1,12 @@
-"""Step 5 nominal case: fluidized bed, bare UCO kernel, process gas, 293.6 K.
+"""Step 5 collapsed-bed case: collapsed bed, bare UCO kernel, process gas, 293.6 K.
 
-Normal operating condition — no water ingress, injector coolant present,
-as-built geometry, room-temperature cross sections (conservative for NCS).
+Companion to run_nominal.py. Uses the same charge, materials, and settings, but
+with state='collapsed' so the bed occupies only the cone at pf_static (denser,
+lower bed height). Together the two runs bound the k-eff between the fluidized
+(operating) and collapsed (settled) bed geometries.
 
 Run:
-    caffeinate python scripts/run_nominal.py
+    caffeinate python scripts/run_collapsed.py
 """
 from __future__ import annotations
 
@@ -20,20 +22,20 @@ import openmc
 from furnace.params import check_env, load_params
 from furnace.model import build_model, export_and_run
 
-_OUT_DIR = Path('results/step5_nominal')
+_OUT_DIR = Path('results/step5_collapsed')
 
 
 def main() -> None:
     check_env()
     params = load_params()
 
-    model, stats = build_model(params)
+    model, stats = build_model(params, state='collapsed')
 
     mdl = params['model']
     n_inactive = int(mdl['inactive'])
     n_active   = int(mdl['batches']) - n_inactive
 
-    print('\nNominal case — fluidized bed, bare UCO kernel, 293.6 K, process gas')
+    print('\nCollapsed case — settled bed, bare UCO kernel, 293.6 K, process gas')
     print(f'  U-235 mass   : {stats.u235_mass_g:.4f} g')
     print(f'  Charge mass  : {params["dimensions"]["bed"]["charge_mass_g"]:.1f} g')
     print(f'  Particles    : {stats.n_particles}')
@@ -56,8 +58,6 @@ def main() -> None:
     print(f'k-eff + 3σ : {keff.nominal_value + 3 * keff.std_dev:.5f}')
     print(f'{"=" * 52}')
     print(f'\nStagepoint written to: {sp_path}')
-    print('Run the collapsed-bed companion next:')
-    print('    caffeinate python scripts/run_collapsed.py')
 
 
 if __name__ == '__main__':

@@ -1,4 +1,4 @@
-# Step 5 — Nominal case and convergence discipline
+# Step 5 — Nominal case: fluidized and collapsed bed states
 
 ## How to run
 
@@ -15,23 +15,21 @@ Run the smoke test first to verify the pipeline (~15 s):
 python3 scripts/smoke_test.py
 ```
 
-Then run in order from the repo root:
+Then run the two nominal cases from the repo root:
 
 ```
 caffeinate python3 scripts/run_nominal.py
-caffeinate python3 scripts/run_step5_convergence.py
-python3 scripts/plot_step5_convergence.py
+caffeinate python3 scripts/run_collapsed.py
 ```
 
 Alternatively, skip activation entirely and use `micromamba run`:
 
 ```
 caffeinate micromamba run -n triso-env python3 scripts/run_nominal.py
-caffeinate micromamba run -n triso-env python3 scripts/run_step5_convergence.py
-micromamba run -n triso-env python3 scripts/plot_step5_convergence.py
+caffeinate micromamba run -n triso-env python3 scripts/run_collapsed.py
 ```
 
-Results are written to `results/step5_nominal/` and `results/step5_convergence/`.
+Results are written to `results/step5_nominal/` (fluidized) and `results/step5_collapsed/` (collapsed).
 
 ---
 
@@ -46,22 +44,24 @@ Results are written to `results/step5_nominal/` and `results/step5_convergence/`
 - **`furnace/geometry.py`** — added optional `seed` keyword to `bed_region()` so packing seed can be overridden independently of `params`
 - **`furnace/materials.py`** — removed `add_s_alpha_beta('c_H_in_H2O')` from `water()` (see Design decisions)
 - **`params.yaml`** — updated `fluidized_height`, `particles`, `batches`, `inactive` (see Design decisions)
-- **`scripts/run_nominal.py`** — runs the nominal eigenvalue case; reports U-235 mass and k-eff ± σ / +2σ / +3σ
-- **`scripts/run_step5_convergence.py`** — three additional runs: `batch_500` (seed=42, 500 active), `seed_43` (250 active, repacked), `seed_44` (250 active, repacked)
-- **`scripts/plot_step5_convergence.py`** — three PNG plots: entropy vs generation, k-eff vs active batches, k-eff vs seed
+- **`scripts/run_nominal.py`** — runs the nominal eigenvalue case in the **fluidized** bed state; reports U-235 mass and k-eff ± σ / +2σ / +3σ
+- **`scripts/run_collapsed.py`** — same script, run with `state='collapsed'`; provides the settled-bed k-eff for comparison
 - **`scripts/smoke_test.py`** — pipeline smoke test: 5 g charge (~5 193 TRISO particles), 1+1 batches, 10 000 particles; completes in ~15 s
 
 ## How it works
 
-`build_model()` calls `bed_region()` for the fluidized TRISO bed, `furnace_shell_cells()` for the retort walls, heater, and injector, then adds a single cell of process gas filling the retort interior above the bed. The three regions are combined into a single root universe. A 10×10×20 Shannon entropy mesh over the full retort cylinder tracks source convergence each generation. The three tallies (flux spectrum, material reaction rates, U-235 fission spatial) are scored over the bed region.
+`build_model()` calls `bed_region()` for the TRISO bed (fluidized or collapsed depending on `state`), `furnace_shell_cells()` for the retort walls, heater, and injector, then adds a single cell of process gas filling the retort interior above the bed. The three regions are combined into a single root universe. A 10×10×20 Shannon entropy mesh over the full retort cylinder tracks source convergence each generation. The three tallies (flux spectrum, reaction rates, U-235 fission spatial) are scored over the bed region.
 
-The `seed` parameter threads through both the packing call (`pack_bed()` → `pack_spheres()`) and the OpenMC transport RNG (`settings.seed`), so changing `seed` in `build_model()` produces a fully independent realisation — different particle positions and different transport history — for the seed study.
+The two nominal runs use identical materials, charge, and settings — they differ only in `state`:
 
-The convergence study uses two batch counts (250 and 500 active) to detect k-eff drift, and three independent seeds (42, 43, 44) to confirm results are not sensitive to a particular geometric realisation of the random packing.
+- **Fluidized** (`run_nominal.py`) — bed occupies the cone (at `pf_fluidized = 0.075`) plus a cylinder overflow above the cone; taller, more dilute geometry representing the operating condition.
+- **Collapsed** (`run_collapsed.py`) — bed occupies only the cone (at `pf_static`); denser, shorter geometry representing the settled state when fluidization stops.
+
+Together the two bracket the range of k-eff between operating and settled bed configurations at the nominal charge.
 
 ## Experimental design
 
-**What is being modelled:** Uniformly fluidized bed of bare UCO kernels (no coating layers — the nominal CVD starting condition) distributed throughout the cone interior (inscribed staircase at pf_fluidized = 0.075) and the retort cylinder above the cone, surrounded by the full graphite retort wall, vacuum gap, graphite heater element, and water-cooled graphite injector. Vacuum boundary conditions at the heater OD, retort top, and injector bottom. The bed is modelled as an explicit random packing (not homogenised).
+**What is being modelled:** Bare UCO kernels (no coating layers — the nominal CVD starting condition) distributed inside the furnace in two bed states, surrounded by the full graphite retort wall, vacuum gap, graphite heater element, and water-cooled graphite injector. Vacuum boundary conditions at the heater OD, retort top, and injector bottom. The bed is modelled as an explicit random packing (not homogenised).
 
 **Materials:** UCO kernel only (19.75 wt% HALEU) — bare kernel stage, no PyC or SiC coatings present. Structural graphite (retort/cone/heater/injector), process gas (98 mol% H₂ + 2 mol% MTS at 1 atm), liquid water in the injector coolant annulus. All materials at 293.6 K (room temperature, most reactive nuclear state). No water ingress. No boron in graphite (NCS convention — no credit for unconfirmed poisons).
 
@@ -75,22 +75,21 @@ The convergence study uses two batch counts (250 and 500 active) to detect k-eff
 - 50 inactive batches / 250 active batches / 20,000 particles per generation
 - Expected statistical precision on k-eff: σ ≈ 1/√(active × particles) relative to batch variance. At deeply subcritical k-eff (expected ≪ 0.1), σ will dominate over any physical effect, so particle count need only be sufficient for reasonable entropy convergence, not tight k-eff precision.
 
-**Batch-count convergence study:** Two runs at seed=42: 250 and 500 active batches. If |k(250) − k(500)| < combined σ, no drift is detected and 250 active batches is sufficient at this stage.
-
-**Seed study:** Three fully independent runs at seeds 42, 43, 44 (250 active batches each). Each seed produces a different random packing geometry AND a different transport RNG sequence, so agreement across seeds confirms neither geometric realisation nor transport randomness biases the result.
-
-**Simulation hierarchy (nominal case):**
+**Simulation hierarchy (each nominal case):**
 ```
 build_model()          1 call
   bed_region()           1 call — explicit TRISO packing
-    pack_bed()             n_slabs + 1 calls — cone staircase slabs + cylinder overflow
+    pack_bed()             n_slabs + 1 calls — cone staircase slabs + cylinder overflow (fluidized)
+                           n_slabs calls     — cone staircase slabs only (collapsed)
   furnace_shell_cells()  1 call — 12 structural cells
 openmc.run()           1 call
   inactive generations:  50 × 20 000 particles  = 1 000 000 particles
   active generations:   250 × 20 000 particles  = 5 000 000 particles
 ```
 
-**Output:** `results/step5_nominal/statepoint.300.h5` — k-eff history, entropy history, three tally results (flux spectrum, reaction rates, U-235 fission spatial).
+**Output:**
+- `results/step5_nominal/statepoint.300.h5` — fluidized k-eff history, entropy history, three tally results.
+- `results/step5_collapsed/statepoint.300.h5` — collapsed k-eff history, entropy history, three tally results.
 
 ## Design decisions
 
@@ -105,9 +104,9 @@ openmc.run()           1 call
 
   Note: `fluidized_height_cm` bounds only the cylinder overflow above the cone, not the total bed height. The cone is always available to the bed regardless of this parameter.
 
-- **Particles updated from 50,000 to 20,000; batches from 110 to 300 (50 inactive + 250 active)** — The previous params reflected a production target that predates step 5 convergence work. Starting at 20,000 with 50 inactive allows the convergence study to confirm whether higher counts are needed before committing to expensive sweeps in steps 7–8.
+- **Particles updated from 50,000 to 20,000; batches from 110 to 300 (50 inactive + 250 active)** — The previous params reflected a production target that predates the step-5 nominal work. 20,000 particles with 50 inactive batches provides adequate entropy convergence at this deeply subcritical stage.
 
-- **`seed` added to `bed_region()` signature** — Minimal non-breaking change (defaults to `params['model']['seed']` if omitted). Required for the seed study to vary both geometry and transport simultaneously.
+- **`seed` added to `bed_region()` signature** — Minimal non-breaking change (defaults to `params['model']['seed']` if omitted). Available for future geometry-realisation studies.
 
 - **`only_fissionable` dropped; replaced by `constraints={'fissionable': True}` on `IndependentSource`** — The `only_fissionable` parameter on `openmc.stats.Box` was deprecated in OpenMC 0.15. The new parameter achieves the same effect (source positions are rejection-sampled until landing in a fissionable cell). This only affects the first generation; active-batch k-eff is unaffected.
 
@@ -123,25 +122,24 @@ openmc.run()           1 call
 
 - **Smoke test uses 10 000 particles** — The Watt source spectrum (peak ~1 MeV) has only ~0.2% fission probability per source particle in a sub-centimetre UCO kernel. With the smoke test's 1.15 cm bed, k-eff ≈ 0.0004 (99.98% leakage), so source particles rarely cause secondary fissions. 10 000 particles gives ~20 expected fission events per generation, reliably populating the fission bank. The smoke test confirmed k-eff = 0.0004 ± (not computed, 1 active batch) for the 5 g case.
 
-- **Batch-count study design** — User revised from a four-point ladder (100/250/500/1000) to two points (250 and 500). This halves the convergence study runtime while still detecting drift (the primary failure mode) and providing one runtime-scaling data point for sweep planning. If the two-point check passes, the study is done; if it fails, a third run can be added.
+- **Two bed-state cases (fluidized + collapsed)** — The step brackets the operating and settled bed geometries at the same nominal charge. The fluidized case is the operating condition; the collapsed case represents what happens when fluidization stops and the bed settles into the cone at pf_static (denser, shorter). Comparing k-eff between the two shows the sensitivity of the nominal condition to bed state without changing any material or charge.
 
 ## Assumptions
 
 **Confirmed:**
-- State: fluidized (step description specifies "fluidized bed")
 - Stage: bare_kernel (nominal CVD operating condition — kernels enter the furnace uncoated)
 - Background: process gas (step description specifies "precursor gas")
 - Temperature: 293.6 K (step description specifies "room temperature"); overridden to 1200 K due to library constraint (see Design decisions)
 - Injector coolant: liquid water at 1.0 g/cm³ (as-built); modelled with free-gas kernel (c_H_in_H2O S(α,β) unavailable in endfb80_hdf5)
 - No water ingress
-- Seed=42 for nominal; seeds 43 and 44 for seed study (different geometry + transport)
-- Batch-count study: 250 vs 500 active batches; 50 inactive fixed
+- Bed states run: fluidized (`state='fluidized'`) and collapsed (`state='collapsed'`)
+- Seed=42 for both cases (same params['model']['seed'])
 
 **Defaulted:**
 - Watt spectrum a = 0.988e6 eV, b = 2.249e-6 eV⁻¹ — standard U-235 thermal fission parameters from ENDF/B-VIII.0, cited in OpenMC stats reference.
 - Energy group boundaries: 0, 0.625 eV, 1 MeV, 20 MeV — standard three-group thermal/epithermal/fast split; 0.625 eV is the conventional 2200 m/s thermal cutoff.
 - Flux tally: single spatial bin (1×1×1 mesh over bed) for an integrated spectrum.
-- U-235 fission spatial mesh: 20×20×30 over the bed bounding box. Each cell is ~0.25 cm × 0.25 cm × ~0.73 cm at the nominal fluidized bed height of 21.9 cm.
+- U-235 fission spatial mesh: 20×20×30 over the bed bounding box.
 - Entropy mesh: 10×10×20 over the full retort cylinder interior.
 
 **Unconfirmed (`# CONFIRM`):**
