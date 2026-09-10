@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import sys
 import time
 import types
@@ -13,6 +14,7 @@ from typing import Any
 import openmc
 
 from furnace.triso import particle_atom_counts, _stage_outer_radius, _shell_vol
+from furnace.geometry import frustum_volume, _particle_effective_density
 
 _RESULTS_DIR = Path(__file__).parent.parent / 'results'
 _CONVERGENCE_CSV = _RESULTS_DIR / 'convergence_n_slabs.csv'
@@ -89,6 +91,38 @@ def _merge(base: dict, patch: dict) -> None:
             _merge(base[k], v)
         else:
             base[k] = v
+
+
+# ---------------------------------------------------------------------------
+# Vessel capacity
+# ---------------------------------------------------------------------------
+
+def vessel_capacity_g(params, state: str, stage: str) -> float:
+    """Maximum charge mass (g) that fits inside the retort at the given packing.
+
+    Available volume = cone frustum (cone base to retort ID) + retort cylinder
+    (from cone top to vacuum boundary at retort height).  Everything above that
+    is outside the vacuum boundary, so any charge that would put the bed above
+    z_rt is not tested.
+    """
+    dim = params['dimensions']
+    mdl = params['model']
+
+    r_thr   = dim['nozzle']['throat_diameter_cm'] / 2.0
+    r_ret   = dim['retort']['id_cm'] / 2.0
+    z_ct    = dim['cone']['vertical_drop_cm']
+    z_rt    = z_ct + dim['retort']['height_cm']
+    half_ang = dim['cone']['included_angle_deg'] / 2.0
+
+    v_frustum = frustum_volume(r_ret, r_thr, half_angle_deg=half_ang)
+    v_cyl     = math.pi * r_ret**2 * (z_rt - z_ct)
+    v_vessel  = v_frustum + v_cyl
+
+    pf = float(mdl['packing_fraction_static'] if state == 'collapsed'
+               else mdl['packing_fraction_static'] / mdl['bed_expansion_ratio'])
+
+    rho_eff = _particle_effective_density(stage, params)
+    return v_vessel * pf * rho_eff
 
 
 # ---------------------------------------------------------------------------
@@ -251,11 +285,12 @@ def run_case(
     if not force and _tag_in_csv(csv_path, tag):
         return _read_row(csv_path, tag)
 
-    # Build modified params
+    # Build modified params: quick defaults first so per-case overrides win.
+    # (Otherwise a mass sweep's charge_mass_g would be wiped out by _QUICK.)
     params_dict = _unfreeze(base_params)
-    _merge(params_dict, overrides)
     if quick:
         _merge(params_dict, _QUICK)
+    _merge(params_dict, overrides)
     params = _freeze(params_dict)
 
     # Build-model kwargs encoded as underscore-prefixed override keys

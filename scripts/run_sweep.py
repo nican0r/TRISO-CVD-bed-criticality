@@ -27,17 +27,49 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from furnace.params import check_env, load_params
-from furnace.sweeps import run_case
+from furnace.sweeps import run_case, vessel_capacity_g
 
 _RESULTS_DIR = _REPO_ROOT / 'results'
 _SEED_CHECK_CSV = _RESULTS_DIR / 'seed_check.csv'
 _SEED_CHECK_DIR = _RESULTS_DIR / 'seed_check'
+
+_MASS_SWEEP_CSV = _RESULTS_DIR / 'mass_sweep.csv'
+_MASS_SWEEP_DIR = _RESULTS_DIR / 'mass_sweep'
+
+# Nominal charge is 95 g (params.yaml).  Multipliers span 1× to 40× nominal.
+# Vessel capacity at the loose-random-pack collapsed pf (0.50) is ~3653 g, so
+# the 40× point (3800 g) is auto-skipped by the precheck; the grid is kept
+# intact so the intended coverage is legible and the skip is recorded rather
+# than hidden.  See docs/steps/step-7-mass-packing-sweeps.md §Packing-fraction
+# change for why pf is 0.50 rather than 0.60.
+_MASS_MULTIPLIERS = (1.0, 1.5, 2.0, 3.0, 5.0, 10.0, 20.0, 40.0)
 
 _SEED_CHECK_CASES = [
     {'tag': 'seed_42', 'overrides': {'model': {'seed': 42}}},
     {'tag': 'seed_43', 'overrides': {'model': {'seed': 43}}},
     {'tag': 'seed_44', 'overrides': {'model': {'seed': 44}}},
 ]
+
+
+def _mass_sweep_cases(params) -> list[dict]:
+    """Build the mass sweep case list from _MASS_MULTIPLIERS × nominal charge."""
+    nominal_g = float(params['dimensions']['bed']['charge_mass_g'])
+    cases = []
+    for mult in _MASS_MULTIPLIERS:
+        mass_g = round(nominal_g * mult, 3)
+        tag = f'mass_{mult:g}x_{mass_g:g}g'.replace('.', 'p')
+        cases.append({
+            'tag': tag,
+            'multiplier': mult,
+            'charge_mass_g': mass_g,
+            'overrides': {
+                'dimensions': {'bed': {'charge_mass_g': mass_g}},
+                '_state': 'collapsed',
+                '_stage': 'bare_kernel',
+                '_background': 'gas',
+            },
+        })
+    return cases
 
 
 # ---------------------------------------------------------------------------
@@ -100,6 +132,67 @@ def seed_check_sweep(params, args) -> list[dict]:
     return results
 
 
+def mass_sweep(params, args) -> tuple[list[dict], list[dict]]:
+    """Mass sweep at collapsed packing, gas background, bare_kernel stage.
+
+    Returns (results, skipped) where `skipped` is the list of cases dropped
+    because the charge would exceed vessel capacity at collapsed packing.
+    """
+    params_path = str(_REPO_ROOT / 'params.yaml')
+    cases = _mass_sweep_cases(params)
+
+    max_mass_g = vessel_capacity_g(params, state='collapsed', stage='bare_kernel')
+    print(f'  Vessel capacity at collapsed packing (bare_kernel): {max_mass_g:.1f} g')
+
+    to_run, skipped = [], []
+    for c in cases:
+        if c['charge_mass_g'] > max_mass_g:
+            skipped.append(c)
+        else:
+            to_run.append(c)
+
+    if skipped:
+        print(f'  Skipping {len(skipped)} case(s) that exceed vessel capacity:')
+        for c in skipped:
+            print(f'    {c["tag"]}: {c["charge_mass_g"]:.1f} g > {max_mass_g:.1f} g')
+
+    print(f'  Running {len(to_run)} case(s): '
+          f'{[c["tag"] for c in to_run]}')
+
+    worker_cases = [
+        (
+            params_path,
+            c['overrides'],
+            c['tag'],
+            str(_MASS_SWEEP_DIR / c['tag']),
+            str(_MASS_SWEEP_CSV),
+            args.threads,
+            None,
+            args.quick,
+            args.force,
+        )
+        for c in to_run
+    ]
+
+    results = []
+    if args.jobs == 1:
+        for wc in worker_cases:
+            results.append(_worker(wc))
+    else:
+        with ProcessPoolExecutor(max_workers=args.jobs) as pool:
+            futures = {pool.submit(_worker, a): a[2] for a in worker_cases}
+            for fut in as_completed(futures):
+                tag = futures[fut]
+                try:
+                    results.append(fut.result())
+                except Exception as exc:
+                    print(f'  [ERROR] {tag}: {exc}')
+        order = {c['tag']: i for i, c in enumerate(to_run)}
+        results.sort(key=lambda r: order.get(r.get('tag', ''), 999))
+
+    return results, skipped
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -114,8 +207,8 @@ def _print_csv(csv_path: Path) -> None:
         print('  (empty CSV)')
         return
     # Print a readable subset of columns
-    show = ['tag', 'seed', 'k_eff', 'sigma', 'k_plus_2sigma', 'dk_disc',
-            'k_plus_2sigma_plus_dk_disc', 'u235_mass_g',
+    show = ['tag', 'seed', 'u235_mass_g', 'k_eff', 'sigma', 'k_plus_2sigma',
+            'k_plus_2sigma_plus_dk_disc', 'bed_height_cm', 'pf_achieved',
             'h_per_u235', 'c_per_u235', 'thermal_flux_fraction', 'wall_time_s']
     available = [c for c in show if c in rows[0]]
     col_w = 22
@@ -131,6 +224,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description='CVD furnace NCS parametric sweep driver')
     parser.add_argument('--seed-check', action='store_true',
                         help='run 3-case seed-variation sweep to validate the pipeline')
+    parser.add_argument('--mass-sweep', action='store_true',
+                        help='run step-7 mass sweep (collapsed packing, gas, bare kernel)')
     parser.add_argument('--quick', action='store_true',
                         help='use reduced particles/batches (1 000 particles, 12 batches)')
     parser.add_argument('--force', action='store_true',
@@ -146,9 +241,9 @@ def main() -> None:
     check_env()
     params = load_params()
 
-    if not args.seed_check:
+    if not (args.seed_check or args.mass_sweep):
         parser.print_help()
-        print('\nNo sweep selected. Pass --seed-check to run the validation sweep.')
+        print('\nNo sweep selected. Pass --seed-check or --mass-sweep.')
         return
 
     if args.seed_check:
@@ -162,6 +257,18 @@ def main() -> None:
         print(f'\nResults ({len(results)} cases):')
         _print_csv(_SEED_CHECK_CSV)
         print(f'\nCSV written to: {_SEED_CHECK_CSV}')
+
+    if args.mass_sweep:
+        mode = 'quick' if args.quick else 'full'
+        print(f'\nMass sweep ({mode} mode, {args.jobs} job(s))')
+        print(f'  CSV → {_MASS_SWEEP_CSV}')
+
+        results, skipped = mass_sweep(params, args)
+
+        print(f'\nResults ({len(results)} cases run, {len(skipped)} skipped):')
+        _print_csv(_MASS_SWEEP_CSV)
+        print(f'\nCSV written to: {_MASS_SWEEP_CSV}')
+        print('Generate plot with:  python scripts/plot_mass_sweep.py')
 
 
 if __name__ == '__main__':

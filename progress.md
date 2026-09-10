@@ -141,3 +141,69 @@ U-235 atom density check:
 - U-234 specification: what is the actual U-234 content in this HALEU fuel spec? Replace OpenMC's approximation with explicit isotopics when available.
 - Gas pressure: confirm whether the CVD process runs at sub-atmospheric pressure. If so, the gas density will be lower (less conservative, but already small).
 - Should process gas density use room temperature (conservative) rather than operating temperature? The difference in k-eff is expected to be negligible, but worth quantifying once the geometry is assembled in Step 3.
+
+---
+
+## Step 7 — Mass sweep (2026-09-10)
+
+### What was added / changed
+
+- `furnace/sweeps.py` — `vessel_capacity_g(params, state, stage)` helper: usable retort volume × packing fraction × per-particle effective density.
+- `furnace/sweeps.py` — `run_case()` merge order fixed: quick-mode defaults now applied *before* per-case overrides, so a sweep can override `charge_mass_g` even in quick mode (previously the 5 g quick-mode value would silently overwrite the sweep's per-case mass).
+- `scripts/run_sweep.py` — `--mass-sweep` flag, `_MASS_MULTIPLIERS`, `_mass_sweep_cases()`, `mass_sweep()` with vessel-capacity precheck and skip-and-note behaviour for over-capacity cases.
+- `scripts/plot_mass_sweep.py` — new plotter: log-x charge mass, k-eff ± 2σ error bars, k+2σ+δk_disc conservative trace, 0.95 subcritical reference line, `UNVALIDATED — SCREENING ONLY` footer.
+- `docs/steps/step-7-mass-packing-sweeps.md` — full step doc including experimental design and the packing-fraction change record.
+- `params.yaml` — **`model.packing_fraction_static` lowered from 0.60 to 0.50** (reversal, see below).
+
+### Design decisions and reasoning
+
+**Reversal — collapsed packing fraction 0.60 → 0.50.** The original 0.60 was chosen in steps 2–3 as a settled/vibrated bed reference. Step 7 is the first step that actually packs a large number of TRISO particles at the collapsed pf (steps 2–6 all used `state='fluidized'` at pf ≈ 0.075, which packs in seconds). A smoke test at 5 g / ~12 000 bare kernels at pf = 0.60 did not converge in 69 minutes of CPU time — the packing algorithm was still running when killed.
+
+The failure is not a bug; `openmc.model.pack_spheres` uses a Jodrey–Tory contraction algorithm whose runtime scales as (φ_max − φ_target)⁻² near the random-close-pack ceiling φ_max ≈ 0.64. The gap-to-jamming numbers make the scaling stark:
+
+| pf_target | gap to 0.64 | relative work per particle |
+|-----------|-------------|-----------------------------|
+| 0.075 | 0.565 | 1× |
+| 0.50  | 0.14  | 16× |
+| 0.60  | 0.04  | 200× |
+
+Physically, 0.50 is the loose random pack of a gravity-settled powder without mechanical tapping — the correct regime for TRISO kernels accumulating in the retort under gravity alone, which is the accident path step 7 is bounding. Reaching 0.60 requires deliberate consolidation (tapping/vibration) that is not postulated. Alternatives (FCC/BCC lattice pack, Lubachevsky–Stillinger implementation) were rejected as either physically wrong or out of scope.
+
+Consequences:
+- `packing_fraction_fluidized` derives to 0.0625 (previously 0.075) because bed_expansion_ratio is unchanged at 8.0. This drops fluidized fissile density by 17%. Non-conservative for the fluidized nominal case, but the absolute k shift is small in the deeply subcritical regime. Step 5 nominal will be re-run before its k-eff is quoted anywhere final.
+- Vessel mass capacity at collapsed pf: 4384 g → 3653 g. The 40× multiplier (3800 g) is now auto-skipped by the sweep's capacity precheck.
+- Steps 2 and 3 documentation still references 0.60 — left unedited because that value was accurate at the time. This entry is the reversal record.
+
+**Quick-mode merge order fix.** In step 6, `run_case` applied `_QUICK` after `overrides`, so `_QUICK['dimensions']['bed']['charge_mass_g'] = 5.0` would wipe out any per-case charge-mass override. The mass sweep can't use `--quick` under that ordering (all cases would collapse to 5 g). Swapped so `_QUICK` is applied first and per-case overrides win. The seed-check sweep is unaffected because it doesn't override `charge_mass_g`.
+
+**Vessel-capacity pre-check, not geometry-level guard.** `bed_region` has no upper-bound check on collapsed bed height. Rather than modify `furnace/geometry.py`, the sweep driver filters the case list up-front and prints the skip reason to stdout. Keeps geometry code untouched and makes the skip decision auditable in the sweep log.
+
+**Mass grid `[1, 1.5, 2, 3, 5, 10, 20, 40]` × 95 g.** Concentrates points below 5× where the k-eff-vs-mass trend is expected to change most, spreads them logarithmically above that. Log-x axis in the plot for the same reason.
+
+**Bare kernel stage.** Highest fissile-atom density per particle — bounding choice for k-eff at a given mass. Coated stages dilute the kernel with low-density C/SiC layers.
+
+**Gas background.** Answers the physical CVD-atmosphere question. Water-flooded variant is deferred to step 8; keeping moderator constant here isolates the mass effect.
+
+**Single seed, no per-mass repeat.** The mass-to-mass k spread is expected to dwarf the seed-to-seed spread from step 6. If a specific mass needs tighter error bars later, the seed-check machinery already exists.
+
+### Assumptions
+
+**Confirmed:**
+- Vessel usable volume = frustum(r_throat → r_retort) + cylinder(r_retort, h = retort height). Derived from `params.yaml` with no fabrication assumption beyond what is already there.
+
+**Defaulted:**
+- Collapsed packing fraction 0.50 (loose random pack of a gravity-settled powder). Marked `# CONFIRM` in `params.yaml`.
+- Mass multiplier grid; log-x plot; single seed; bare kernel stage; gas background — see design decisions.
+
+**Unconfirmed:**
+- δk_disc from the collapsed / water / low-particle convergence study applied to all cases regardless of state or background. Conservative but not tight for the gas cases. Inherited Stage 0 approximation from step 6.
+- Fluidized nominal (step 5) k-eff will shift slightly under the new pf_fluidized = 0.0625 — magnitude to be quantified by a re-run before that number is quoted final.
+
+### Surprises
+
+- **Every step before this one had implicitly assumed collapsed packing was tractable, because no step before this one actually built a collapsed bed at scale.** The state parameter existed and worked for the geometry logic, but no OpenMC run ever exercised it. This is a good reminder that "the code compiles and step 3 says it works" is not the same as "we've ever run it end-to-end."
+
+### Open questions
+
+- Is 0.50 the right loose-random-pack value for this specific powder, or should it be measured against the actual TRISO kernel population? A process-specific value would supersede the literature estimate.
+- Should step 5 nominal be re-run and its progress-log entry updated to reflect the new fluidized pf? Deferred until user decision.

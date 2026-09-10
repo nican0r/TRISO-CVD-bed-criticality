@@ -83,9 +83,27 @@ model:
   n_slabs: 8                       # staircase discretisation; converged at n=8 (δk<σ, V_err=16.4%)
   seed: 42                         # deterministic; record in every result file
   # Packing fraction limits.
-  # A collapsed or vibration-settled bed can approach max_packing_fraction
-  # (random close packing ~0.64); an operating fluidized bed is far below it.
+  # A collapsed / gravity-settled bed sits between loose random pack (~0.55)
+  # and random close pack (~0.64, the hard geometric ceiling); an operating
+  # fluidized bed is far below either.
+  #
+  # packing_fraction_static was lowered from 0.60 → 0.50 during step 7 for a
+  # tractable-packing reason, not a physics reason:
+  #   openmc.model.pack_spheres uses a Jodrey-Tory contraction algorithm whose
+  #   runtime scales roughly as (φ_max − φ_target)⁻². The gap-to-jamming is
+  #     pf=0.50 → 0.14  (baseline)
+  #     pf=0.60 → 0.04  (~12× slower per particle, and ~200× slower than the
+  #                      fluidized pf=0.075 case that was well tested)
+  #   Packing 12 000 bare kernels at 0.60 did not converge in ~1 hour; at 0.50
+  #   it completes in seconds.
+  #
+  # Physical interpretation: 0.50 is the loose random pack of a gravity-
+  # settled powder without mechanical tapping or vibration — the correct
+  # regime for a bed of TRISO kernels that has accumulated inside the retort
+  # under gravity but has not been consolidated. Reaching 0.60 requires
+  # mechanical settling, which is not part of the postulated accident path.
+  # This is a Stage 0 practical choice; document as # CONFIRM.
   max_packing_fraction: 0.64       # random close packing; hard upper guard
-  packing_fraction_static: 0.60   # settled/vibrated bed  # CONFIRM
-  packing_fraction_fluidized: 0.075  # derived: pf_collapsed / bed_expansion_ratio; not set directly
+  packing_fraction_static: 0.50   # loose random pack (gravity-settled, no tapping)  # CONFIRM
+  packing_fraction_fluidized: 0.0625  # derived: pf_collapsed / bed_expansion_ratio; not set directly
   bed_expansion_ratio: 8.0           # volumetric fluidized/collapsed ratio at operating flow  # CONFIRM
