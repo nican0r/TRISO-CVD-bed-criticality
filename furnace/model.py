@@ -49,8 +49,6 @@ def build_model(
     *,
     state: str = 'fluidized',
     stage: str = 'bare_kernel',
-    background: str = 'gas',
-    flood_extent: str = 'none',
     z_flood: float | None = None,
     water_density_gcc: float = 1.0,
     n_inactive: int | None = None,
@@ -66,13 +64,10 @@ def build_model(
     params        : frozen params dict from load_params()
     state         : 'fluidized' (nominal) or 'collapsed'
     stage         : TRISO deposition stage; 'bare_kernel' for nominal
-    background       : 'gas' (nominal CVD atmosphere) or 'water' (legacy full-retort flood)
-    flood_extent     : 'none' | 'bed_and_cone' | 'full_retort' — where water fills
-                       'bed_and_cone': water in bed interstitials + cone void, gas above bed
-                       'full_retort':  water everywhere inside the retort (= background='water')
     z_flood          : bottom-up flood level (cm, absolute z). When set, all bed/cone cells
                        whose z_bot < z_flood receive water; cells above receive gas.
                        The gas-above-bed cell is also split at z_flood if needed.
+                       When None, process gas fills the entire bed and retort interior.
     water_density_gcc: density of flood water (g/cm³); default 1.0 (liquid)
     n_inactive    : inactive batches; defaults to params['model']['inactive']
     n_active      : active batches; defaults to params['model']['batches'] - inactive
@@ -102,13 +97,7 @@ def build_model(
     water_mat  = _water(water_density_gcc)
     gas_mat    = _process_gas(params)
 
-    # Determine which material fills the bed (interstitials + cone voids) and
-    # the open retort space above the bed.
-    # legacy: background='water' ≡ flood_extent='full_retort'
-    _full_flood = flood_extent == 'full_retort' or background == 'water'
-    _any_flood  = flood_extent in ('bed_and_cone', 'full_retort') or _full_flood or z_flood is not None
-    bed_fill    = water_mat if _any_flood else gas_mat
-    above_fill  = water_mat if _full_flood else gas_mat
+    bed_fill = water_mat if z_flood is not None else gas_mat
 
     # ── Bed ──────────────────────────────────────────────────────────────────
     bed = bed_region(
@@ -160,7 +149,7 @@ def build_model(
             ]
     else:
         gas_cells = [
-            openmc.Cell(name='gas_above_bed', fill=above_fill,
+            openmc.Cell(name='gas_above_bed', fill=gas_mat,
                         region=-cyl_ret_in & +zp_gas_above_bot & -zp_rt_top),
         ]
 

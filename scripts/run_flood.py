@@ -83,8 +83,6 @@ def _bottomup_cases(params) -> list[dict]:
                     'tag': f'{state}_bottomup_{density_label}_level{i+1:02d}_z{z:.3f}cm',
                     'overrides': {
                         **base,
-                        '_background': 'gas',
-                        '_flood_extent': 'none',
                         '_z_flood': z,
                         '_water_density': density_gcc,
                     },
