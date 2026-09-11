@@ -1,0 +1,435 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TRISO-CVD-bed-criticality AWS Batch stack: S3 bucket for manifests + results,
+  EFS filesystem for the shared ENDF/B-VIII.0 nuclear-data library, ECR repo,
+  Batch compute environment on EC2 Spot, job queue, job definition, and a
+  small Fargate task that hydrates EFS from S3 the first time.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC to place Batch instances and EFS mount targets in.
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: >
+      Subnets for Batch/EFS. Use public subnets to avoid a NAT gateway
+      ($30/mo standing charge); Spot instances receive public IPs and can
+      reach ECR/S3 endpoints directly.
+  MaxvCpus:
+    Type: Number
+    Default: 256
+    Description: Maximum aggregate vCPUs the compute environment can burst to.
+  JobVcpus:
+    Type: Number
+    Default: 8
+  JobMemoryMiB:
+    Type: Number
+    Default: 14336
+  SpotBidPercentage:
+    Type: Number
+    Default: 100
+    Description: Max Spot price as a percentage of On-Demand.
+
+Resources:
+
+  # ─── S3 ───────────────────────────────────────────────────────────────────
+  ResultsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      BucketName: !Sub "triso-cvd-ncs-${AWS::AccountId}-${AWS::Region}"
+      LifecycleConfiguration:
+        Rules:
+          - Id: transition-and-expire-runs
+            Status: Enabled
+            Prefix: runs/
+            Transitions:
+              - StorageClass: STANDARD_IA
+                TransitionInDays: 30
+            ExpirationInDays: 180
+      Tags:
+        - Key: Project
+          Value: triso-ncs
+
+  # Empty the bucket on stack delete so the DeletionPolicy actually works.
+  BucketEmptierRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: empty-bucket
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:ListBucketVersions
+                  - s3:DeleteObject
+                  - s3:DeleteObjectVersion
+                Resource:
+                  - !GetAtt ResultsBucket.Arn
+                  - !Sub "${ResultsBucket.Arn}/*"
+
+  BucketEmptierFn:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 300
+      Role: !GetAtt BucketEmptierRole.Arn
+      Code:
+        ZipFile: |
+          import boto3, urllib.request, json
+          def _send(event, status, data=None):
+              body = json.dumps({
+                  "Status": status, "Reason": "see logs",
+                  "PhysicalResourceId": event.get("PhysicalResourceId", "empty"),
+                  "StackId": event["StackId"], "RequestId": event["RequestId"],
+                  "LogicalResourceId": event["LogicalResourceId"],
+                  "Data": data or {},
+              }).encode()
+              req = urllib.request.Request(event["ResponseURL"], data=body, method="PUT")
+              urllib.request.urlopen(req)
+          def handler(event, ctx):
+              try:
+                  if event["RequestType"] == "Delete":
+                      bkt = event["ResourceProperties"]["Bucket"]
+                      s3 = boto3.resource("s3")
+                      s3.Bucket(bkt).object_versions.delete()
+                      s3.Bucket(bkt).objects.delete()
+                  _send(event, "SUCCESS")
+              except Exception as e:
+                  print(repr(e)); _send(event, "SUCCESS")
+
+  BucketEmptier:
+    Type: AWS::CloudFormation::CustomResource
+    DependsOn: ResultsBucket
+    Properties:
+      ServiceToken: !GetAtt BucketEmptierFn.Arn
+      Bucket: !Ref ResultsBucket
+
+  # ─── ECR ──────────────────────────────────────────────────────────────────
+  EcrRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: triso-cvd-ncs
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      EmptyOnDelete: true
+      Tags:
+        - Key: Project
+          Value: triso-ncs
+
+  # ─── EFS ──────────────────────────────────────────────────────────────────
+  EfsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: triso-ncs EFS + hydrator + batch traffic
+      VpcId: !Ref VpcId
+
+  EfsSelfIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref EfsSecurityGroup
+      IpProtocol: tcp
+      FromPort: 2049
+      ToPort: 2049
+      SourceSecurityGroupId: !Ref EfsSecurityGroup
+
+  EfsFileSystem:
+    Type: AWS::EFS::FileSystem
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Encrypted: true
+      PerformanceMode: generalPurpose
+      ThroughputMode: bursting
+      FileSystemTags:
+        - Key: Name
+          Value: triso-ncs-xs
+        - Key: Project
+          Value: triso-ncs
+
+  EfsMountTarget1:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref EfsFileSystem
+      SubnetId: !Select [0, !Ref SubnetIds]
+      SecurityGroups: [!Ref EfsSecurityGroup]
+
+  EfsAccessPoint:
+    Type: AWS::EFS::AccessPoint
+    Properties:
+      FileSystemId: !Ref EfsFileSystem
+      PosixUser:
+        Uid: 0
+        Gid: 0
+      RootDirectory:
+        Path: /xs
+        CreationInfo:
+          OwnerUid: 0
+          OwnerGid: 0
+          Permissions: "0755"
+
+  # ─── Hydrator (Fargate task that copies S3 → EFS once) ───────────────────
+  HydratorCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: triso-ncs-hydrator
+
+  HydratorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/ecs/triso-ncs-hydrator
+      RetentionInDays: 14
+
+  HydratorExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  HydratorTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: hydrate
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [s3:GetObject, s3:ListBucket]
+                Resource:
+                  - !GetAtt ResultsBucket.Arn
+                  - !Sub "${ResultsBucket.Arn}/*"
+
+  HydratorTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: triso-ncs-hydrator
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      Cpu: "1024"
+      Memory: "2048"
+      ExecutionRoleArn: !GetAtt HydratorExecutionRole.Arn
+      TaskRoleArn: !GetAtt HydratorTaskRole.Arn
+      Volumes:
+        - Name: xs
+          EFSVolumeConfiguration:
+            FilesystemId: !Ref EfsFileSystem
+            TransitEncryption: ENABLED
+      ContainerDefinitions:
+        - Name: hydrator
+          Image: public.ecr.aws/aws-cli/aws-cli:latest
+          EntryPoint: ["/bin/sh", "-c"]
+          Command:
+            - !Sub "aws s3 sync s3://${ResultsBucket}/nuclear-data/ /xs/ --only-show-errors && ls -la /xs/"
+          MountPoints:
+            - ContainerPath: /xs
+              SourceVolume: xs
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref HydratorLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: hydrate
+
+  # ─── IAM for Batch ────────────────────────────────────────────────────────
+  BatchServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: batch.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole
+
+  SpotFleetRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: spotfleet.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2SpotFleetTaggingRole
+
+  BatchInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+
+  BatchInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref BatchInstanceRole]
+
+  BatchExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  BatchJobRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: results-bucket-rw
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt ResultsBucket.Arn
+                  - !Sub "${ResultsBucket.Arn}/*"
+
+  # ─── Batch compute environment / queue / job definition ──────────────────
+  ComputeEnvironment:
+    Type: AWS::Batch::ComputeEnvironment
+    DependsOn: EfsMountTarget1
+    Properties:
+      Type: MANAGED
+      ServiceRole: !GetAtt BatchServiceRole.Arn
+      State: ENABLED
+      ComputeResources:
+        Type: SPOT
+        AllocationStrategy: SPOT_CAPACITY_OPTIMIZED
+        BidPercentage: !Ref SpotBidPercentage
+        MinvCpus: 0
+        MaxvCpus: !Ref MaxvCpus
+        DesiredvCpus: 0
+        InstanceTypes: [c7i.2xlarge, c6i.2xlarge, c5.2xlarge]
+        Subnets: !Ref SubnetIds
+        SecurityGroupIds: [!Ref EfsSecurityGroup]
+        InstanceRole: !GetAtt BatchInstanceProfile.Arn
+        SpotIamFleetRole: !GetAtt SpotFleetRole.Arn
+        Tags:
+          Project: triso-ncs
+
+  JobQueue:
+    Type: AWS::Batch::JobQueue
+    Properties:
+      JobQueueName: triso-ncs-queue
+      State: ENABLED
+      Priority: 1
+      ComputeEnvironmentOrder:
+        - Order: 1
+          ComputeEnvironment: !Ref ComputeEnvironment
+
+  JobLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/batch/triso-ncs
+      RetentionInDays: 30
+
+  JobDefinition:
+    Type: AWS::Batch::JobDefinition
+    Properties:
+      JobDefinitionName: triso-ncs-job
+      Type: container
+      PlatformCapabilities: [EC2]
+      RetryStrategy:
+        Attempts: 2
+        EvaluateOnExit:
+          - Action: RETRY
+            OnStatusReason: "Host EC2*"
+          - Action: EXIT
+            OnReason: "*"
+      Timeout:
+        AttemptDurationSeconds: 10800   # 3 h — sweep jobs run well under this
+      ContainerProperties:
+        Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EcrRepository}:latest"
+        JobRoleArn: !GetAtt BatchJobRole.Arn
+        ExecutionRoleArn: !GetAtt BatchExecutionRole.Arn
+        ResourceRequirements:
+          - Type: VCPU
+            Value: !Ref JobVcpus
+          - Type: MEMORY
+            Value: !Ref JobMemoryMiB
+        Environment:
+          - Name: OPENMC_CROSS_SECTIONS
+            Value: /xs/endfb80_hdf5/cross_sections.xml
+        Volumes:
+          - Name: xs
+            EfsVolumeConfiguration:
+              FileSystemId: !Ref EfsFileSystem
+              TransitEncryption: ENABLED
+        MountPoints:
+          - ContainerPath: /xs
+            SourceVolume: xs
+            ReadOnly: true
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group: !Ref JobLogGroup
+            awslogs-region: !Ref AWS::Region
+            awslogs-stream-prefix: job
+
+Outputs:
+  ResultsBucket:
+    Value: !Ref ResultsBucket
+  EcrRepositoryUri:
+    Value: !GetAtt EcrRepository.RepositoryUri
+  JobQueue:
+    Value: !Ref JobQueue
+  JobDefinition:
+    Value: !Ref JobDefinition
+  EfsFileSystemId:
+    Value: !Ref EfsFileSystem
+  HydratorCluster:
+    Value: !Ref HydratorCluster
+  HydratorTaskDefinition:
+    Value: !Ref HydratorTaskDefinition
+  HydratorSubnet:
+    Value: !Select [0, !Ref SubnetIds]
+  HydratorSecurityGroup:
+    Value: !Ref EfsSecurityGroup

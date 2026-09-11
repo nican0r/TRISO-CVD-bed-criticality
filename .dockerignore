@@ -1,0 +1,17 @@
+.git/
+.gitignore
+.claude/
+cases/
+!cases/.triso_cache/
+!cases/.triso_cache/**
+results/
+docs/
+plan/
+progress.md
+README.md
+**/__pycache__/
+**/*.pyc
+**/.DS_Store
+**/statepoint.*.h5
+**/summary.h5
+**/tallies.out

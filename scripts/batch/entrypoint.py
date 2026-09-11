@@ -61,11 +61,13 @@ def _s3_upload_dir(local_dir: Path, uri_prefix: str) -> None:
 
 
 def _smoke_row() -> dict:
+    # charge_mass_g=5.0 gives ~8500 TRISO particles (vs 162K at default 95g),
+    # making local geometry+XS setup tractable while still banking fission sites.
     return {
         "state": "fluidized",
         "stage": "bare_kernel",
-        "background": "gas",
-        "n_particles": 200,
+        "charge_mass_g": 5.0,
+        "n_particles": 500,
         "n_inactive": 5,
         "n_active": 15,
         "seed": 42,
