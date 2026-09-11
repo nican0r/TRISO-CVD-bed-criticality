@@ -197,12 +197,12 @@ def build_model(
     settings.entropy_mesh = entropy_mesh
     settings.source      = [src]
     # Materials are set to 293.6 K (room-temperature bounding case; see materials.py).
-    # endfb80_hdf5 has data only at 900, 1200, 2500 K — no room-temperature point.
-    # 'nearest' snaps each material to 900 K (closest available).  Using 900 K
-    # instead of 293.6 K is non-conservative (less Doppler broadening → higher k-eff
-    # at lower temperature); documented as a known Stage 0 limitation in preamble.md.
-    # 'default' = 900 K covers any nuclide whose temperature falls below the library
-    # minimum; 'range' must include 293.6 K so OpenMC accepts it before snapping.
+    # 'nearest' snaps to the closest kT in the library for each nuclide:
+    #   294 K  — U, H, O, N, Si, Cl, Ar isotopes (added via scripts/add_room_temp.py)
+    #   900 K  — C12, C13 (nndc_hdf5 has only C0, no isotopic match; conservative)
+    #   1200 K — c_Graphite S(α,β) (only temperature in endfb80_hdf5/thermal/)
+    # 'default' = 900 K catches any nuclide below the library minimum.
+    # 'range' must include 293.6 K so OpenMC accepts the material temperature before snapping.
     settings.temperature = {
         'method':  'nearest',
         'default': 900.0,
