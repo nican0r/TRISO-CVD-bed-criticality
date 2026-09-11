@@ -1,10 +1,11 @@
-"""Step 5 nominal case: fluidized bed, bare UCO kernel, process gas, 293.6 K.
+"""Step 5 — fluidized-bed k-eff case.
 
-Normal operating condition — no water ingress, injector coolant present,
-as-built geometry, room-temperature cross sections (conservative for NCS).
+Fluidized bed, bare UCO kernel, process gas, 293.6 K.  Normal operating condition:
+no water ingress, injector coolant present, as-built geometry.
 
-Run:
-    caffeinate python scripts/run_nominal.py
+Run both step-5 cases to bound k-eff across bed states:
+    caffeinate python scripts/run_nominal.py    # fluidized (this script)
+    caffeinate python scripts/run_collapsed.py  # collapsed
 """
 from __future__ import annotations
 
@@ -42,7 +43,7 @@ def main() -> None:
     print(f'  Batches      : {n_inactive} inactive + {n_active} active')
     print(f'  Particles/gen: {mdl["particles"]}')
     print(f'  Seed         : {mdl["seed"]}')
-    print(f'\nRunning OpenMC eigenvalue calculation → {_OUT_DIR}/')
+    print(f'\nRunning OpenMC eigenvalue → {_OUT_DIR}/')
 
     sp_path = export_and_run(model, _OUT_DIR)
 
@@ -55,7 +56,7 @@ def main() -> None:
     print(f'k-eff + 2σ : {keff.nominal_value + 2 * keff.std_dev:.5f}')
     print(f'k-eff + 3σ : {keff.nominal_value + 3 * keff.std_dev:.5f}')
     print(f'{"=" * 52}')
-    print(f'\nStagepoint written to: {sp_path}')
+    print(f'\nStatepoint written to: {sp_path}')
     print('Run the collapsed-bed companion next:')
     print('    caffeinate python scripts/run_collapsed.py')
 

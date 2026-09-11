@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import shutil
 import sys
 from pathlib import Path
 from typing import NamedTuple
@@ -22,7 +23,7 @@ from furnace.materials import (
 )
 from furnace.geometry import bed_region, furnace_shell_cells
 
-_OPENMC_EXEC = str(Path(sys.executable).parent / 'openmc')
+_OPENMC_EXEC = shutil.which('openmc') or str(Path(sys.executable).parent / 'openmc')
 
 # U-235 thermal Watt fission spectrum: a in eV, b in 1/eV (ENDF/B-VIII.0 defaults)
 _WATT_A = 0.988e6    # eV

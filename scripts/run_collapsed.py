@@ -1,12 +1,13 @@
-"""Step 5 collapsed-bed case: collapsed bed, bare UCO kernel, process gas, 293.6 K.
+"""Step 5 — collapsed-bed k-eff case.
 
-Companion to run_nominal.py. Uses the same charge, materials, and settings, but
-with state='collapsed' so the bed occupies only the cone at pf_static (denser,
-lower bed height). Together the two runs bound the k-eff between the fluidized
-(operating) and collapsed (settled) bed geometries.
+Collapsed bed, bare UCO kernel, process gas, 293.6 K.  Same charge, materials,
+and settings as run_nominal.py, but with state='collapsed' so the bed occupies
+only the cone at pf_static.  Together the two step-5 runs bound k-eff across the
+two bounding bed geometries.
 
 Run:
-    caffeinate python scripts/run_collapsed.py
+    caffeinate python scripts/run_nominal.py    # fluidized
+    caffeinate python scripts/run_collapsed.py  # collapsed (this script)
 """
 from __future__ import annotations
 
