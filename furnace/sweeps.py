@@ -43,6 +43,7 @@ _CSV_FIELDNAMES = [
     'k_eff', 'sigma', 'k_plus_2sigma', 'k_plus_3sigma',
     'dk_disc', 'k_plus_2sigma_plus_dk_disc',
     'u235_mass_g', 'state', 'stage', 'background',
+    'flood_extent', 'z_flood_cm', 'water_density_gcc',
     'n_slabs', 'bed_volume_cm3', 'pf_achieved', 'bed_height_cm',
     'h_per_u235', 'c_per_u235', 'thermal_flux_fraction',
     'wall_time_s', 'seed', 'openmc_version',
@@ -294,13 +295,19 @@ def run_case(
     params = _freeze(params_dict)
 
     # Build-model kwargs encoded as underscore-prefixed override keys
-    state      = overrides.get('_state',      'fluidized')
-    stage      = overrides.get('_stage',      'bare_kernel')
-    background = overrides.get('_background', 'gas')
+    state        = overrides.get('_state',        'fluidized')
+    stage        = overrides.get('_stage',        'bare_kernel')
+    background   = overrides.get('_background',   'gas')
+    flood_extent = overrides.get('_flood_extent', 'none')
+    z_flood      = overrides.get('_z_flood',      None)
+    water_density = overrides.get('_water_density', 1.0)
 
     t0 = time.perf_counter()
 
-    model, stats = build_model(params, state=state, stage=stage, background=background)
+    model, stats = build_model(
+        params, state=state, stage=stage, background=background,
+        flood_extent=flood_extent, z_flood=z_flood, water_density_gcc=water_density,
+    )
     sp_path = _export_and_run(model, Path(run_dir), threads=threads, mpi_args=mpi_args)
 
     wall_time = time.perf_counter() - t0
@@ -312,10 +319,11 @@ def run_case(
         thermal_ff = _thermal_flux_fraction(sp)
 
     all_mats = {m.name: m for m in model.geometry.get_all_materials().values()}
-    if background == 'gas':
-        fill_mat = all_mats['process_gas']
-    else:
+    _any_flood = flood_extent != 'none' or z_flood is not None or background == 'water'
+    if _any_flood:
         fill_mat = next(m for name, m in all_mats.items() if name.startswith('water_'))
+    else:
+        fill_mat = all_mats['process_gas']
 
     h_per_u235, c_per_u235 = _compute_hc_ratios(stats, params, stage, fill_mat)
 
@@ -337,6 +345,9 @@ def run_case(
         'state':                      state,
         'stage':                      stage,
         'background':                 background,
+        'flood_extent':               flood_extent,
+        'z_flood_cm':                 z_flood if z_flood is not None else '',
+        'water_density_gcc':          water_density if _any_flood else '',
         'n_slabs':                    n_slabs,
         'bed_volume_cm3':             stats.V_bulk_cm3,
         'pf_achieved':                stats.pf_achieved,

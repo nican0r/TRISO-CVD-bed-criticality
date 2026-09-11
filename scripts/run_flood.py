@@ -1,21 +1,37 @@
 #!/usr/bin/env python
 """Step 8 flooding accident sweep driver.
 
-Runs the bottom-up flood sweep from the injector throat: 20 water levels
-rising from z=0 to the retort top plus a dry baseline, liquid water
-(1.0 g/cm³), collapsed bed. CSV → results/flood_bottomup.csv.
+Both sub-sweeps run for both collapsed (pf=0.50) and fluidized (pf=0.333) bed
+states.  The fluidized state is included because flooding raises the H/²³⁵U
+ratio by ~2× relative to the collapsed state (more void = more water per fuel
+atom), so the fluidized+flooded case may be the bounding condition when the
+system is undermoderated at pf=0.50.
+
+  --flood-sweep   : Uniform flood cross-product:
+                    {collapsed, fluidized} × {none, bed_and_cone, full_retort}
+                    6 cases total (2 dry baselines + 4 flooded).
+                    CSV → results/flood_sweep.csv.
+
+  --bottomup-flood: Bottom-up flood from the injector throat:
+                    20 water levels from z=0 to the retort top plus a dry
+                    baseline, for both bed states.
+                    42 cases total (2 dry baselines + 2 states × 20 levels).
+                    CSV → results/flood_bottomup.csv.
 
 Usage:
     # Smoke-test (1 000 particles, 12 batches, ~30 s/case):
+    caffeinate python scripts/run_flood.py --flood-sweep --quick
     caffeinate python scripts/run_flood.py --bottomup-flood --quick
 
-    # Full run (21 cases):
+    # Full runs:
+    caffeinate python scripts/run_flood.py --flood-sweep
     caffeinate python scripts/run_flood.py --bottomup-flood
 
     # Parallel (N cases concurrently):
+    caffeinate python scripts/run_flood.py --flood-sweep -j 6
     caffeinate python scripts/run_flood.py --bottomup-flood -j 4
 
-    # Plot after CSV is written:
+    # Plot after both CSVs are written:
     caffeinate python scripts/plot_flood_sweep.py
 """
 from __future__ import annotations
@@ -34,22 +50,42 @@ from furnace.params import check_env, load_params
 from furnace.sweeps import run_case
 
 _RESULTS_DIR = _REPO_ROOT / 'results'
+_FLOOD_CSV   = _RESULTS_DIR / 'flood_sweep.csv'
+_FLOOD_DIR   = _RESULTS_DIR / 'flood_sweep'
 _BU_CSV      = _RESULTS_DIR / 'flood_bottomup.csv'
 _BU_DIR      = _RESULTS_DIR / 'flood_bottomup'
 
-# Collapsed / bare kernel is the bounding bed configuration for all flood cases.
-_BASE_OVERRIDES = {
-    '_state':  'collapsed',
-    '_stage':  'bare_kernel',
-}
+_STATES = ['collapsed', 'fluidized']
 
 
 # ---------------------------------------------------------------------------
 # Case definitions
 # ---------------------------------------------------------------------------
 
+def _flood_cases() -> list[dict]:
+    """Uniform flood cross-product: 2 states × 3 flood extents = 6 cases."""
+    cases = []
+    for state in _STATES:
+        base = {'_state': state, '_stage': 'bare_kernel'}
+        cases.append({
+            'tag': f'{state}_dry',
+            'overrides': {**base, '_background': 'gas', '_flood_extent': 'none'},
+        })
+        cases.append({
+            'tag': f'{state}_bed_and_cone',
+            'overrides': {**base, '_background': 'gas',
+                          '_flood_extent': 'bed_and_cone', '_water_density': 1.0},
+        })
+        cases.append({
+            'tag': f'{state}_full_retort',
+            'overrides': {**base, '_background': 'water',
+                          '_flood_extent': 'full_retort', '_water_density': 1.0},
+        })
+    return cases
+
+
 def _bottomup_cases(params) -> list[dict]:
-    """20 uniformly-spaced bottom-up flood levels from z=0 to retort top.
+    """2 dry baselines + 2 states × 20 z_flood levels = 42 cases.
 
     z_flood levels are computed at runtime from params so they stay in sync
     with any geometry edits to params.yaml.
@@ -60,22 +96,23 @@ def _bottomup_cases(params) -> list[dict]:
     levels = [round(z_rt * (i + 1) / n_levels, 3) for i in range(n_levels)]
 
     cases = []
-    # Dry baseline at z_flood=None for comparison
-    cases.append({
-        'tag': 'bottomup_dry_baseline',
-        'overrides': {**_BASE_OVERRIDES, '_background': 'gas', '_flood_extent': 'none'},
-    })
-    for i, z in enumerate(levels):
+    for state in _STATES:
+        base = {'_state': state, '_stage': 'bare_kernel'}
         cases.append({
-            'tag': f'bottomup_level{i+1:02d}_z{z:.3f}cm',
-            'overrides': {
-                **_BASE_OVERRIDES,
-                '_background': 'gas',
-                '_flood_extent': 'none',
-                '_z_flood': z,
-                '_water_density': 1.0,
-            },
+            'tag': f'{state}_bottomup_dry',
+            'overrides': {**base, '_background': 'gas', '_flood_extent': 'none'},
         })
+        for i, z in enumerate(levels):
+            cases.append({
+                'tag': f'{state}_bottomup_level{i+1:02d}_z{z:.3f}cm',
+                'overrides': {
+                    **base,
+                    '_background': 'gas',
+                    '_flood_extent': 'none',
+                    '_z_flood': z,
+                    '_water_density': 1.0,
+                },
+            })
     return cases
 
 
@@ -144,11 +181,11 @@ def _print_csv(csv_path: Path) -> None:
     if not rows:
         print('  (empty CSV)')
         return
-    show = ['tag', 'z_flood_cm', 'water_density_gcc',
+    show = ['tag', 'state', 'flood_extent', 'z_flood_cm', 'water_density_gcc',
             'k_eff', 'sigma', 'k_plus_2sigma', 'k_plus_2sigma_plus_dk_disc',
-            'bed_height_cm', 'h_per_u235', 'wall_time_s']
+            'h_per_u235', 'wall_time_s']
     available = [c for c in show if c in rows[0]]
-    col_w = 20
+    col_w = 22
     header = '  ' + '  '.join(f'{c:<{col_w}}' for c in available)
     print(header)
     print('  ' + '-' * (len(header) - 2))
@@ -159,8 +196,10 @@ def _print_csv(csv_path: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description='CVD furnace step-8 flood sweep driver')
+    parser.add_argument('--flood-sweep', action='store_true',
+                        help='run uniform flood cross-product (6 cases: 2 states × 3 extents)')
     parser.add_argument('--bottomup-flood', action='store_true',
-                        help='run bottom-up z_flood sweep (21 cases)')
+                        help='run bottom-up z_flood sweep (42 cases: 2 states × 21 levels)')
     parser.add_argument('--quick', action='store_true',
                         help='use reduced particles/batches (1 000 particles, 12 batches)')
     parser.add_argument('--force', action='store_true',
@@ -171,9 +210,9 @@ def main() -> None:
                         help='number of cases to run in parallel')
     args = parser.parse_args()
 
-    if not args.bottomup_flood:
+    if not (args.flood_sweep or args.bottomup_flood):
         parser.print_help()
-        print('\nNo sweep selected. Pass --bottomup-flood.')
+        print('\nNo sweep selected. Pass --flood-sweep or --bottomup-flood.')
         return
 
     check_env()
@@ -181,15 +220,28 @@ def main() -> None:
     params_path = str(_REPO_ROOT / 'params.yaml')
     mode = 'quick' if args.quick else 'full'
 
-    cases = _bottomup_cases(params)
-    print(f'\nBottom-up flood sweep ({mode} mode, {args.jobs} job(s))')
-    print(f'  Cases: {len(cases)} total (1 dry baseline + 20 z_flood levels)')
-    print(f'  CSV  → {_BU_CSV}')
-    results = _run_cases(cases, _BU_DIR, _BU_CSV, params_path, args)
-    print(f'\nResults ({len(results)} cases):')
-    _print_csv(_BU_CSV)
-    print(f'\nCSV written to: {_BU_CSV}')
-    print('\nGenerate plots with:  caffeinate python scripts/plot_flood_sweep.py')
+    if args.flood_sweep:
+        cases = _flood_cases()
+        print(f'\nUniform flood sweep ({mode} mode, {args.jobs} job(s))')
+        print(f'  Cases ({len(cases)}): {[c["tag"] for c in cases]}')
+        print(f'  CSV  → {_FLOOD_CSV}')
+        results = _run_cases(cases, _FLOOD_DIR, _FLOOD_CSV, params_path, args)
+        print(f'\nResults ({len(results)} cases):')
+        _print_csv(_FLOOD_CSV)
+        print(f'\nCSV written to: {_FLOOD_CSV}')
+
+    if args.bottomup_flood:
+        cases = _bottomup_cases(params)
+        print(f'\nBottom-up flood sweep ({mode} mode, {args.jobs} job(s))')
+        print(f'  Cases: {len(cases)} total (2 dry baselines + 2 states × 20 z_flood levels)')
+        print(f'  CSV  → {_BU_CSV}')
+        results = _run_cases(cases, _BU_DIR, _BU_CSV, params_path, args)
+        print(f'\nResults ({len(results)} cases):')
+        _print_csv(_BU_CSV)
+        print(f'\nCSV written to: {_BU_CSV}')
+
+    if args.flood_sweep or args.bottomup_flood:
+        print('\nGenerate plots with:  caffeinate python scripts/plot_flood_sweep.py')
 
 
 if __name__ == '__main__':
