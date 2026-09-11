@@ -174,18 +174,6 @@ def build_model(
     # would be missing from a manually assembled list.
     all_mats = list(geometry.get_all_materials().values())
 
-    # endfb80_hdf5 temperature availability:
-    #   Neutron XS (C12, H1, U235, …): 900, 1200, 2500 K
-    #   c_Graphite S(α,β):             1200 K only
-    #   c_H_in_H2O S(α,β):             checked below
-    # 1200 K is the only temperature at which all required tables co-exist.
-    # Non-conservative for NCS (higher T → less Doppler absorption → higher k,
-    # but the system is deeply subcritical so the effect is negligible at Stage 0);
-    # documented as a known limitation in preamble.md.
-    _LIB_TEMP_K = 1200.0
-    for mat in all_mats:
-        mat.temperature = _LIB_TEMP_K
-
     materials = openmc.Materials(all_mats)
 
     # ── Settings ──────────────────────────────────────────────────────────────
@@ -218,28 +206,22 @@ def build_model(
     settings.seed        = _seed
     settings.entropy_mesh = entropy_mesh
     settings.source      = [src]
-    # The endfb80_hdf5 library has data only at 900, 1200, 2500 K — no room-
-    # temperature evaluation.  'nearest' selects 900 K for all materials set
-    # to 293.6 K.  Using 900 K instead of 293.6 K is non-conservative for NCS
-    # (higher temperature → more Doppler broadening → lower k-eff); documented
-    # as a known Stage 0 limitation in preamble.md.
+    # Materials are set to 293.6 K (room-temperature bounding case; see materials.py).
     # endfb80_hdf5 has data only at 900, 1200, 2500 K — no room-temperature point.
-    # 'nearest' snaps each nuclide to the closest available temperature.
-    # 'default' = 900 K covers nuclides whose material temperature (293.6 K) falls
-    # below the library minimum; 'range' must include 293.6 K so OpenMC does not
-    # reject it before the nearest-temperature search runs.
-    # Using 900 K instead of 293.6 K is non-conservative (less Doppler broadening
-    # → higher k-eff at lower temperature, but library can't provide it); documented
-    # as a known Stage 0 limitation in preamble.md.
+    # 'nearest' snaps each material to 900 K (closest available).  Using 900 K
+    # instead of 293.6 K is non-conservative (less Doppler broadening → higher k-eff
+    # at lower temperature); documented as a known Stage 0 limitation in preamble.md.
+    # 'default' = 900 K covers any nuclide whose temperature falls below the library
+    # minimum; 'range' must include 293.6 K so OpenMC accepts it before snapping.
     settings.temperature = {
         'method':  'nearest',
         'default': 900.0,
         'range':   [250.0, 3000.0],
     }
-    # UCO kernels occupy ~0.72% of the source Box volume (pf=0.0625 × kernel fraction
+    # UCO kernels occupy ~3.76% of the source Box volume (pf=0.39 × kernel fraction
     # 0.123 × π/4 box-to-cylinder ratio).  The default source_rejection_fraction=0.05
     # (5%) would reject our valid geometry.  Setting to 0.005 allows acceptance rates
-    # down to 0.5% — comfortably above the 0.72% actual rate.
+    # down to 0.5% — comfortably below the 3.76% actual rate.
     settings.source_rejection_fraction = 0.005
 
     # ── Tallies ───────────────────────────────────────────────────────────────

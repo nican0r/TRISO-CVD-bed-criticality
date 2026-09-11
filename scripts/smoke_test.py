@@ -1,9 +1,9 @@
 """Smoke test: exercise the full run_nominal code path with a tiny geometry.
 
-Uses charge_mass_g=0.5 (~500 TRISO particles, ~1 MB geometry XML) and
-the minimum possible batch/particle count so the full pipeline completes
-in under 2 minutes.  Catches cross-section, geometry, and tally errors
-before committing to a full production run.
+Uses charge_mass_g=5.0 (~14 000 TRISO particles) and the minimum possible
+batch/particle count so the full pipeline completes in under 2 minutes.
+Catches cross-section, geometry, and tally errors before committing to a
+full production run.
 
 Run from repo root:
     python3 scripts/smoke_test.py

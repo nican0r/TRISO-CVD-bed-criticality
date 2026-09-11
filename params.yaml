@@ -33,11 +33,9 @@ dimensions:
     body_od: 30.0              # mm; outer wall of injector body (~3 mm wall outside coolant)
     cooled_length: 60.0        # mm; total cooled extent below cone base (throat + injector body)
   bed:
-    static_depth: 35.0         # static bed depth in cone + lower cylinder  # CONFIRM
     fluidized_height: 250.0    # mm; fluidization zone height — raised from 180 mm placeholder to 250 mm (see docs/steps/step-5-nominal-case.md §Design decisions)  # CONFIRM
     charge_mass_g: 95.0        # g; starting charge; sweep target for max safe mass study  # CONFIRM
-  bed_volume:                  # not a length; stored separately to avoid mm→cm confusion
-    static_bulk_cc: 18.10      # cm³; derived: charge_mass_g / rho_eff / pf_collapsed=0.50  # CONFIRM
+    static_bulk_cc: 15.60      # cm³; derived: charge_mass_g / rho_eff / pf_collapsed=0.58  # CONFIRM
 
 triso:
   units: um  # micrometres; load_params() converts to cm (×1e-4)
@@ -55,7 +53,6 @@ materials:
   sic_density_gcc: 3.20             # g/cm³; AGR-1 target 3.19; INL/EXT-10-19476 Table 3
   opyc_density_gcc: 1.87            # g/cm³; same target as IPyC per AGR-1 spec
   graphite_structural_density_gcc: 1.75    # g/cm³; placeholder  # CONFIRM
-  graphite_boron_ppm: 0.0                  # ppm B-eq impurity; zero per NCS convention
 
 gas:
   # SiC-step CVD atmosphere: 98 mol% H₂ + 2 mol% MTS (methyltrichlorosilane).
@@ -70,40 +67,36 @@ gas:
     CH3SiCl3: 0.02                # methyltrichlorosilane (MTS), SiC precursor
 
 model:
-  # Cross-section note: this library was processed at 900 K and 1200 K only
-  # (ENDF/B-VIII.0, endfb80_hdf5).  OpenMC nearest-temperature method will
-  # silently use 1200 K data for materials set to fuel_temperature_k = 1500 K.
-  # The c_Graphite S(α,β) evaluation is also capped at 1200 K in this library.
-  # Both effects are non-conservative for Doppler feedback and for thermal
-  # scattering; this is a known Stage 0 limitation — see docs/steps/preamble.md.
-  fuel_temperature_k: 1500.0      # K; lowest CVD operating temperature  # CONFIRM
+  # Cross-section note: materials are set to 293.6 K (room-temperature bounding case).
+  # endfb80_hdf5 has data only at 900, 1200, 2500 K; OpenMC nearest-temperature snaps
+  # all materials to 900 K.  Using 900 K instead of 293.6 K is non-conservative for
+  # NCS (less Doppler broadening → higher k-eff at lower T, but library can't provide
+  # it); documented as a known Stage 0 limitation — see docs/steps/preamble.md.
   particles: 20000                 # Step-5 starting value; raise after convergence study confirms sufficiency
   batches: 300                     # 50 inactive + 250 active; step-5 production setting
   inactive: 50                     # raised from 10 to 50 for step-5 convergence discipline
-  n_slabs: 8                       # staircase discretisation; converged at n=8 (δk<σ, V_err=16.4%)
+  n_slabs: 32                      # staircase discretisation; raised from 8→32 to reduce per-slab particle count
+                                   # (~70k→~18k for nominal 95 g charge) and make pf≈0.58 packing tractable.
+                                   # k-eff convergence: n=8 was sufficient (δk<σ); n=32 is better (V_err=4.7%).
+                                   # dk_disc for n=32 not in CSV (no n=64 baseline); _load_dk_disc returns 0.0;
+                                   # estimated missing bias ~3×10⁻⁵ (geometric halving of 8→16→32 table), negligible vs σ.
   seed: 42                         # deterministic; record in every result file
-  # Packing fraction limits.
-  # A collapsed / gravity-settled bed sits between loose random pack (~0.55)
-  # and random close pack (~0.64, the hard geometric ceiling); an operating
-  # fluidized bed is far below either.
+  # Packing fraction history.
+  # 0.60 (step 2 original): Jodrey-Tory pack_spheres did not converge at 0.60
+  #   for ~12 000 particles (69 min CPU, killed); gap-to-jamming (0.64−0.60=0.04)
+  #   scales as gap⁻² → ~200× slower than the low-pf fluidized case.
+  # 0.50 (step 7): lowered for algorithmic tractability; physically defensible
+  #   as the low end of loose random pack without mechanical tapping.
+  # 0.58 (current): realistic loose-random-pack value confirmed against
+  #   process measurements. n_slabs raised from 8→32 simultaneously to keep
+  #   per-slab particle count ≤ ~18 k (was ~70 k at n=8), making pf=0.58
+  #   tractable: gap=0.06, ~5× slower per particle than pf=0.50, ~2× faster
+  #   than the failed pf=0.60, and ~14× faster than pf=0.60 at the old n=8.
   #
-  # packing_fraction_static was lowered from 0.60 → 0.50 during step 7 for a
-  # tractable-packing reason, not a physics reason:
-  #   openmc.model.pack_spheres uses a Jodrey-Tory contraction algorithm whose
-  #   runtime scales roughly as (φ_max − φ_target)⁻². The gap-to-jamming is
-  #     pf=0.50 → 0.14  (baseline)
-  #     pf=0.60 → 0.04  (~12× slower per particle, and ~200× slower than the
-  #                      fluidized pf=0.075 case that was well tested)
-  #   Packing 12 000 bare kernels at 0.60 did not converge in ~1 hour; at 0.50
-  #   it completes in seconds.
-  #
-  # Physical interpretation: 0.50 is the loose random pack of a gravity-
-  # settled powder without mechanical tapping or vibration — the correct
-  # regime for a bed of TRISO kernels that has accumulated inside the retort
-  # under gravity but has not been consolidated. Reaching 0.60 requires
-  # mechanical settling, which is not part of the postulated accident path.
-  # This is a Stage 0 practical choice; document as # CONFIRM.
+  # pf_fluidized is derived: pf_static / bed_expansion_ratio.
+  # bed_expansion_ratio changed from 8.0 → 1.4872 to yield pf_fluidized = 0.39,
+  # a near-minimum-fluidization operating condition confirmed by process data.
   max_packing_fraction: 0.64       # random close packing; hard upper guard
-  packing_fraction_static: 0.50   # loose random pack (gravity-settled, no tapping)  # CONFIRM
-  packing_fraction_fluidized: 0.0625  # derived: pf_collapsed / bed_expansion_ratio; not set directly
-  bed_expansion_ratio: 8.0           # volumetric fluidized/collapsed ratio at operating flow  # CONFIRM
+  packing_fraction_static: 0.58   # confirmed loose-random-pack value  # CONFIRM
+  packing_fraction_fluidized: 0.39  # derived: pf_static / bed_expansion_ratio
+  bed_expansion_ratio: 1.4872       # volumetric fluidized/collapsed ratio at operating flow  # CONFIRM

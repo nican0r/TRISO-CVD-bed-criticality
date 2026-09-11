@@ -247,8 +247,8 @@ def pack_bed(region, packing_fraction, outer_radius, fill_universe, seed, params
     non-convex regions that share a bounding box with a different shape, pass
     distinct seeds or verify manually that the cached geometry is appropriate.
 
-    An operating fluidised bed runs at packing_fraction_fluidized (~0.0625);
-    a gravity-settled collapsed bed uses packing_fraction_static (~0.50), well
+    An operating fluidised bed runs at packing_fraction_fluidized (~0.39);
+    a gravity-settled collapsed bed uses packing_fraction_static (~0.58), well
     below the random close-packing limit of 0.64.
     """
     max_pf = params['model']['max_packing_fraction']
@@ -439,7 +439,7 @@ if __name__ == '__main__':
     params = load_params()
 
     # Build a small bare-kernel test bed inside a 0.25 cm sphere.
-    # At r_kernel ≈ 0.02125 cm and PF = 0.35 this gives ~570 particles —
+    # At r_kernel ≈ 0.02125 cm and PF = 0.39 this gives ~630 particles —
     # enough for a meaningful mass check while pack_spheres finishes quickly.
     stage = 'bare_kernel'
     fill_univ, outer_r = particle_at_stage(stage, params)
@@ -473,7 +473,7 @@ if __name__ == '__main__':
 
     # --- Stage progression (analytical, no transport) ---
     # N_fixed: number of bare kernels that fill the nominal static bed at PF_static.
-    V_nominal  = params['dimensions']['bed_volume']['static_bulk_cc']
+    V_nominal  = params['dimensions']['bed']['static_bulk_cc']
     pf_static  = float(params['model']['packing_fraction_static'])
     r_k        = _layer_radii(params)[0]
     N_fixed    = int(pf_static * V_nominal / _shell_vol(r_k))
