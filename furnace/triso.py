@@ -247,8 +247,8 @@ def pack_bed(region, packing_fraction, outer_radius, fill_universe, seed, params
     non-convex regions that share a bounding box with a different shape, pass
     distinct seeds or verify manually that the cached geometry is appropriate.
 
-    An operating fluidised bed runs at packing_fraction_fluidized (~0.39);
-    a gravity-settled collapsed bed uses packing_fraction_static (~0.58), well
+    An operating fluidised bed runs at packing_fraction_fluidized (~0.333);
+    a gravity-settled collapsed bed uses packing_fraction_static (~0.50), well
     below the random close-packing limit of 0.64.
     """
     max_pf = params['model']['max_packing_fraction']
@@ -266,6 +266,13 @@ def pack_bed(region, packing_fraction, outer_radius, fill_universe, seed, params
     if cache_path.exists():
         centers = np.load(cache_path)['centers']
     else:
+        # Guard: skip regions too small to fit even one sphere (partial-slab
+        # edge case where num_spheres=0 causes a ZeroDivisionError inside
+        # pack_spheres' RSP mesh initialisation).
+        V_sphere = (4.0 / 3.0) * math.pi * outer_radius**3
+        bb = region.bounding_box
+        if int(packing_fraction * float(bb.volume) / V_sphere) == 0:
+            return []
         centers = openmc.model.pack_spheres(
             radius=outer_radius,
             region=region,

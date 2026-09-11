@@ -177,7 +177,7 @@ def bed_region(params, state, stage, n_slabs, background_material, charge_mass_g
 
     Packing fractions:
         collapsed  : params['model']['packing_fraction_static']   (~0.50)
-        fluidized  : pf_static / bed_expansion_ratio               (~0.0625)
+        fluidized  : pf_static / bed_expansion_ratio               (~0.333)
 
     Both states use the same inscribed staircase geometry: cone slabs filled from
     bottom to top at the state's packing fraction, then overflow into the retort

@@ -218,10 +218,10 @@ def build_model(
         'default': 900.0,
         'range':   [250.0, 3000.0],
     }
-    # UCO kernels occupy ~3.76% of the source Box volume (pf=0.39 × kernel fraction
+    # UCO kernels occupy ~3.2% of the source Box volume (pf=0.333 × kernel fraction
     # 0.123 × π/4 box-to-cylinder ratio).  The default source_rejection_fraction=0.05
     # (5%) would reject our valid geometry.  Setting to 0.005 allows acceptance rates
-    # down to 0.5% — comfortably below the 3.76% actual rate.
+    # down to 0.5% — comfortably below the ~3.2% actual rate.
     settings.source_rejection_fraction = 0.005
 
     # ── Tallies ───────────────────────────────────────────────────────────────

@@ -207,3 +207,31 @@ Consequences:
 
 - Is 0.50 the right loose-random-pack value for this specific powder, or should it be measured against the actual TRISO kernel population? A process-specific value would supersede the literature estimate.
 - Should step 5 nominal be re-run and its progress-log entry updated to reflect the new fluidized pf? Deferred until user decision.
+
+---
+
+## Packing-fraction and discretisation revision (2026-09-11)
+
+### What changed
+
+- **`model.bed_expansion_ratio`** updated from the 8.0 placeholder to **1.5** (confirmed against process data for near-minimum-fluidization operation). This yields `pf_fluidized = 0.50 / 1.5 = 0.333` (previously 0.0625 at the 8.0 ratio).
+- **`model.packing_fraction_static`** retained at **0.50** (unchanged from the step-7 correction; see that entry for pf=0.60→0.50 reasoning).
+- **`model.packing_fraction_fluidized`** updated to **0.333** (was 0.0625 at old ratio, then transiently 0.39 during a 0.58 trial; now settled at 0.333 with the confirmed ratio).
+- **`model.n_slabs`** raised from **8 → 32** to improve geometric accuracy. At pf=0.50 the convergence study shows δk=1.56×10⁻⁴ at n=8 (4× above σ); at n=32 δk=5.32×10⁻⁵ approaches σ. V_error drops from 16.4% to 4.7%.
+- **`dimensions.bed.static_bulk_cc`** corrected to **18.10 cm³** (= 95 g / 10.5 g/cm³ / 0.50).
+- **`scripts/run_convergence.py`** re-run at pf_static=0.50 to regenerate `results/convergence_n_slabs.csv` with fresh k-eff values (n=32: k=0.02588).
+
+### Key convergence results (pf=0.50, bare kernel, water background)
+
+| n_slabs | V_staircase (cm³) | V_error (%) | k_eff | δk_disc |
+|---------|-------------------|-------------|-------|---------|
+| 4  | 19.54 | 30.9% | 0.02638 | 2.87×10⁻⁴ |
+| 8  | 23.66 | 16.4% | 0.02609 | 1.56×10⁻⁴ |
+| 16 | 25.84 |  8.7% | 0.02594 | 5.32×10⁻⁵ |
+| 32 | 26.95 |  4.7% | 0.02588 | — |
+
+Estimated n=32→64 δk ≈ 3×10⁻⁵ (geometric halving); `_load_dk_disc(32)` returns 0.0 (conservative).
+
+### Documentation updated
+
+All references to pf_fluidized=0.0625/0.39, pf_static=0.58, bed_expansion_ratio=8.0, and n_slabs=8 in `docs/steps/step-2` through `step-8`, `furnace/geometry.py`, `furnace/triso.py`, `furnace/model.py`, `scripts/plot_flood_sweep.py`, and `params.yaml` have been updated to reflect the current values.

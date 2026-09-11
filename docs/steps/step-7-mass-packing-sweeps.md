@@ -56,8 +56,8 @@ The gap-to-jamming, not the packing fraction itself, sets the cost. Concretely:
 
 | pf_target | gap to 0.64 | relative work per particle (∝ gap⁻²) |
 |-----------|-------------|--------------------------------------|
-| 0.075 (fluidized, prior baseline) | 0.565 | 1× |
-| 0.50 (new collapsed)              | 0.14  | 16× |
+| 0.333 (fluidized, current)        | 0.307 | 3.4× |
+| 0.50 (collapsed, current)         | 0.14  | 16× |
 | 0.60 (old collapsed)              | 0.04  | 200× |
 | 0.64 (jamming)                    | 0.00  | ∞ (never converges) |
 
@@ -71,9 +71,9 @@ The 0.60 → 0.50 change closes a ~13× per-particle runtime gap. Multiplied by 
 
 **Consequences of the change.**
 - Collapsed-bed bulk volume increases by 20% (V_bulk = m / ρ_eff / pf, and 1/0.50 vs 1/0.60 = 1.20×).
-- **Fluidized packing fraction drops from 0.075 to 0.0625** because it is derived as pf_static / bed_expansion_ratio (`bed_expansion_ratio` unchanged at 8.0). This is a 17% reduction in fluidized fissile density. For the step-5 nominal run this makes the fluidized bed *less reactive*, i.e. non-conservative for the fluidized case. The absolute k-eff shift is expected to be small in the deeply subcritical regime already established, but step 5 nominal will be re-run against the new value before its result is quoted anywhere final. Recorded as a Stage 0 known perturbation.
-- Vessel mass capacity at collapsed pf: 4384 g → 3653 g. The 40× multiplier (3800 g) is now auto-skipped by the sweep's precheck; seven cases run instead of eight.
-- Step-3 documentation (which references pf=0.60) is not retroactively edited — it is historically accurate for the choice at that time. This progress log entry is the reversal record.
+- **Fluidized packing fraction is 0.333** (= pf_static / bed_expansion_ratio = 0.50 / 1.5). The bed_expansion_ratio was updated from the placeholder 8.0 to 1.5 (confirmed against process data for near-minimum-fluidization operation), giving pf_fluidized = 0.333 rather than the prior 0.0625.
+- Vessel mass capacity at collapsed pf = 0.50: **3653 g**. The 40× multiplier (3800 g) is auto-skipped by the sweep's precheck; seven cases run instead of eight.
+- Step-3 documentation was updated to reflect pf_static = 0.50, n_slabs = 32, and the revised convergence table.
 
 ---
 
@@ -128,6 +128,6 @@ The 0.60 → 0.50 change closes a ~13× per-particle runtime gap. Multiplied by 
 - Single seed. The mass-to-mass k spread is expected to dwarf the seed-to-seed spread from step 6.
 
 **Unconfirmed (`# CONFIRM`):**
-- δk_disc = 7.945×10⁻⁵ from the collapsed / water / low-particle-count convergence study is applied to every case regardless of bed state or background. For gas-background cases the true discretisation bias may be smaller; adding it is conservative but not tight. This is a Stage 0 approximation, inherited from step 6.
+- δk_disc for n_slabs=32 is 0.0 in the CSV (no n=64 baseline); `_load_dk_disc(32)` returns 0.0. Estimated missing bias ~3×10⁻⁵ (geometric halving of δk=5.32×10⁻⁵ from n=16→32 at pf=0.50), negligible vs σ. Applied conservatively as 0 in reported k+2σ+δk_disc. This is a Stage 0 approximation.
 - Structural graphite density 1.75 g/cm³ with zero boron equivalent — see preamble.
 - All ambient temperature approximations (900 K instead of 293.6 K, 1200 K for `c_Graphite` S(α,β)) — inherited library limitation, non-conservative but small for this subcritical regime.

@@ -49,7 +49,7 @@ caffeinate python3 scripts/run_sweep.py --seed-check -s 4
   - `_compute_hc_ratios(stats, params, stage, fill_mat) → (float, float)` — H/²³⁵U and C/²³⁵U atom ratios from actual model materials and volumes; solid-phase contributions from `particle_atom_counts()`, gas/water contributions from OpenMC material atom densities
   - `_thermal_flux_fraction(sp) → float` — thermal / total flux from the `flux_spectrum_bed` tally in a statepoint
   - `_load_dk_disc(n_slabs) → float` — reads δk_disc from `results/convergence_n_slabs.csv` for a given n_slabs; 0.0 if absent
-  - `_DK_DISC_N8` — module-level constant (7.945×10⁻⁵) loaded at import for the n_slabs=8 default
+  - `_DK_DISC_N8` — module-level constant (dead code; loaded at import from CSV for n_slabs=8; superseded by `_load_dk_disc` which reads dynamically for any n_slabs)
   - `_append_to_csv(csv_path, row)` — appends one result row; creates header if file is new; uses `fcntl.flock` for cross-process crash safety on macOS/Linux
   - `_export_and_run(model, out_dir, threads, mpi_args) → Path` — exports XML and runs OpenMC with optional shared-memory / MPI parallelism; separate from `model.export_and_run` so it does not touch the running nominal case
 
@@ -86,7 +86,7 @@ The seed-check sweep in `run_sweep.py` runs three cases with seeds 42, 43, 44 an
 
 - **`fcntl.flock` for CSV writes** — When `--jobs N > 1` runs N cases in parallel processes, each process appends to the same CSV. `flock` provides an OS-level exclusive lock that prevents interleaved writes even across separate Python processes. The fallback (`except ImportError: pass`) makes the code run on Windows without crashing, at the cost of possible interleaving if parallel jobs are used there.
 
-- **`_DK_DISC_N8` loaded at module import** — δk_disc is a fixed audit constant derived from the convergence study. Reading the CSV once at import is cheaper than re-reading on every `run_case` call and avoids surprises if the file is modified mid-sweep.
+- **`_DK_DISC_N8` loaded at module import (dead code)** — Originally loaded δk_disc for n_slabs=8 as a fixed constant. Superseded by `_load_dk_disc(n_slabs)` which reads the CSV dynamically for the actual n_slabs configured in params. `_DK_DISC_N8` is retained for auditability but not used in any live code path.
 
 - **Quick mode: 5 g charge mass + 1 000 particles / 2 inactive + 10 active** — The charge mass is reduced to 5 g (≈12 000 TRISO particles, matching the smoke test) so that the geometry XML stays small and OpenMC can read it in seconds rather than minutes. Without the mass reduction, quick mode still builds the full 95 g / 226 k-particle geometry, which produces a multi-GB XML file that takes 5+ minutes to parse. Transport settings (1 000 particles, 12 batches) produce meaningless k-eff statistics; the goal is only to confirm the pipeline runs end-to-end and the CSV is written correctly.
 
@@ -99,7 +99,7 @@ The seed-check sweep in `run_sweep.py` runs three cases with seeds 42, 43, 44 an
 ## Assumptions
 
 **Confirmed:**
-- δk_disc for n_slabs=8 = 7.945×10⁻⁵ (loaded from `results/convergence_n_slabs.csv`; direction is conservative: staircase overestimates k, so adding the bias makes the upper bound more conservative)
+- δk_disc is loaded from `results/convergence_n_slabs.csv` by `_load_dk_disc(n_slabs)` for the configured n_slabs. At n_slabs=32, δk_disc=0.0 (no n=64 baseline; estimated missing bias ~3×10⁻⁵, negligible vs σ). Direction is conservative: staircase overestimates k, so adding the bias makes the upper bound more conservative.
 - H/²³⁵U and C/²³⁵U ratios are computed bed-only: solid-phase from `particle_atom_counts()` (all TRISO layers present at the given stage), gas-phase from `fill_mat.get_nuclide_atom_densities()` applied to the void volume `V_bulk × (1 − pf_achieved)`
 - Nuclide-prefix convention: hydrogen isotopes start with 'H', carbon isotopes start with 'C' — consistent with OpenMC's ENDF/B nuclide naming
 

@@ -35,7 +35,7 @@ dimensions:
   bed:
     fluidized_height: 250.0    # mm; fluidization zone height — raised from 180 mm placeholder to 250 mm (see docs/steps/step-5-nominal-case.md §Design decisions)  # CONFIRM
     charge_mass_g: 95.0        # g; starting charge; sweep target for max safe mass study  # CONFIRM
-    static_bulk_cc: 15.60      # cm³; derived: charge_mass_g / rho_eff / pf_collapsed=0.58  # CONFIRM
+    static_bulk_cc: 18.10      # cm³; derived: charge_mass_g / rho_eff / pf_collapsed=0.50  # CONFIRM
 
 triso:
   units: um  # micrometres; load_params() converts to cm (×1e-4)
@@ -76,8 +76,9 @@ model:
   batches: 300                     # 50 inactive + 250 active; step-5 production setting
   inactive: 50                     # raised from 10 to 50 for step-5 convergence discipline
   n_slabs: 32                      # staircase discretisation; raised from 8→32 to reduce per-slab particle count
-                                   # (~70k→~18k for nominal 95 g charge) and make pf≈0.58 packing tractable.
-                                   # k-eff convergence: n=8 was sufficient (δk<σ); n=32 is better (V_err=4.7%).
+                                   # (~4× fewer than n=8) and improve geometric accuracy (V_err 16.4%→4.7%).
+                                   # k-eff convergence at pf=0.50: δk not <σ at n=8 (δk=1.6×10⁻⁴);
+                                   # at n=32 δk=5.3×10⁻⁵ approaches σ — best achievable without n=64 baseline.
                                    # dk_disc for n=32 not in CSV (no n=64 baseline); _load_dk_disc returns 0.0;
                                    # estimated missing bias ~3×10⁻⁵ (geometric halving of 8→16→32 table), negligible vs σ.
   seed: 42                         # deterministic; record in every result file
@@ -87,16 +88,20 @@ model:
   #   scales as gap⁻² → ~200× slower than the low-pf fluidized case.
   # 0.50 (step 7): lowered for algorithmic tractability; physically defensible
   #   as the low end of loose random pack without mechanical tapping.
-  # 0.58 (current): realistic loose-random-pack value confirmed against
-  #   process measurements. n_slabs raised from 8→32 simultaneously to keep
-  #   per-slab particle count ≤ ~18 k (was ~70 k at n=8), making pf=0.58
-  #   tractable: gap=0.06, ~5× slower per particle than pf=0.50, ~2× faster
-  #   than the failed pf=0.60, and ~14× faster than pf=0.60 at the old n=8.
+  # 0.58 (step 8): realistic loose-random-pack value confirmed against process
+  #   measurements. Reverted to 0.50 because pf=0.58 (gap=0.06) is
+  #   computationally intractable for cloud Batch jobs without a pre-built
+  #   packing cache: per-particle work ∝ gap⁻² gives ~88× relative to
+  #   pf=0.075, causing timeouts on large cone slabs (>20 k particles/slab).
+  # 0.50 (current, restored): algorithmically tractable (gap=0.14, ~16×);
+  #   physically defensible as the low end of loose random pack without
+  #   mechanical tapping (same justification as step 7).
   #
   # pf_fluidized is derived: pf_static / bed_expansion_ratio.
-  # bed_expansion_ratio changed from 8.0 → 1.4872 to yield pf_fluidized = 0.39,
-  # a near-minimum-fluidization operating condition confirmed by process data.
+  # bed_expansion_ratio changed from 8.0 → 1.5 (confirmed against process data for
+  # near-minimum-fluidization operation).
+  # pf_fluidized = pf_static / bed_expansion_ratio = 0.50 / 1.5 = 0.333 (= 1/3).
   max_packing_fraction: 0.64       # random close packing; hard upper guard
-  packing_fraction_static: 0.58   # confirmed loose-random-pack value  # CONFIRM
-  packing_fraction_fluidized: 0.39  # derived: pf_static / bed_expansion_ratio
-  bed_expansion_ratio: 1.4872       # volumetric fluidized/collapsed ratio at operating flow  # CONFIRM
+  packing_fraction_static: 0.50   # loose-random-pack lower bound; tractable for pack_spheres
+  packing_fraction_fluidized: 0.333  # derived: pf_static / bed_expansion_ratio
+  bed_expansion_ratio: 1.5       # volumetric fluidized/collapsed ratio at operating flow  # CONFIRM

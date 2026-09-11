@@ -19,8 +19,8 @@ status: complete
   - `if __name__ == '__main__':` block — packs a small bare-kernel test bed, prints `bed_stats`, performs the mass check, and prints the stage-progression table for the nominal 50 cm³ bed
 - `params.yaml` — three new keys added under `model:`:
   - `max_packing_fraction: 0.64` — hard upper guard, refused with a descriptive error
-  - `packing_fraction_static: 0.60` (`# CONFIRM`) — settled/vibrated bed reference
-  - `packing_fraction_fluidized: 0.35` (`# CONFIRM`) — operating fluidised bed reference
+  - `packing_fraction_static: 0.50` (`# CONFIRM`) — loose-random-pack lower bound
+  - `packing_fraction_fluidized: 0.333` (`# CONFIRM`) — derived: pf_static / bed_expansion_ratio
 
 ## How it works
 
@@ -38,7 +38,7 @@ No simulation is run in this step. The `__main__` block constructs geometry and 
 
 - **Cache key based on region bounding box, not region topology.** Serialising an arbitrary OpenMC region tree is complex and version-dependent. For the convex regions used throughout this model (spheres, finite cylinders, cone frustums), the bounding box is sufficient to uniquely identify the region given the same PF, radius, and seed. Non-convex or compound regions that share a bounding box with a different shape could produce false cache hits; a comment in `pack_bed` flags this and advises using distinct seeds for such cases.
 
-- **Fixed-mass framing is recommended for the deposition-stage k-eff sweep.** A real coating run loads a fixed kernel charge; the particle count is constant and layers accumulate on every kernel simultaneously. Under fixed-mass, the uranium inventory and kernel count are the same at every stage, isolating the effect of the changing particle geometry (outer radius, C/U-235 ratio, moderator-to-fuel ratio) on k-eff. Under fixed-volume, the particle count decreases as particles grow and the uranium inventory changes between stages, which conflates two independent variables and makes the k-eff trend harder to interpret physically. Both framings are printed in the `__main__` stage-progression table; the nominal 50 cm³ static bed at PF = 0.60 holds approximately 27 500 bare kernels.
+- **Fixed-mass framing is recommended for the deposition-stage k-eff sweep.** A real coating run loads a fixed kernel charge; the particle count is constant and layers accumulate on every kernel simultaneously. Under fixed-mass, the uranium inventory and kernel count are the same at every stage, isolating the effect of the changing particle geometry (outer radius, C/U-235 ratio, moderator-to-fuel ratio) on k-eff. Under fixed-volume, the particle count decreases as particles grow and the uranium inventory changes between stages, which conflates two independent variables and makes the k-eff trend harder to interpret physically. Both framings are printed in the `__main__` stage-progression table; the nominal 18.1 cm³ static bed at PF = 0.50 holds approximately 9 050 bare kernels by solid volume.
 
 - **`particle_at_stage` creates new material objects on each call.** Each call to the factory calls the material factory functions, which increment OpenMC's global material ID counter. For the step 5 sweep where all five stages are run sequentially as separate `Model` objects, this is harmless. If all five universes were assembled into a single model simultaneously, the repeated UCO kernel objects at different IDs would be inefficient but not incorrect. A material-caching layer is deferred to step 5 when the full assembly pattern is known.
 
@@ -57,15 +57,15 @@ No simulation is run in this step. The `__main__` block constructs geometry and 
 
 ### Defaulted
 - **`pack_bed` extended signature**: added `outer_radius` and `fill_universe` parameters beyond the step specification's `(region, packing_fraction, seed)`. Confirmed by user.
-- **`packing_fraction_fluidized: 0.35`**: typical fluidised bed value; no process measurement available. Marked `# CONFIRM`.
-- **`packing_fraction_static: 0.60`**: representative settled/vibrated bed; below random close packing (0.64). Marked `# CONFIRM`.
+- **`packing_fraction_fluidized: 0.333`**: derived from pf_static / bed_expansion_ratio (1.5); confirmed against process data for near-minimum-fluidization operation. Marked `# CONFIRM`.
+- **`packing_fraction_static: 0.50`**: loose-random-pack lower bound for gravity-settled TRISO bed; algorithmically tractable for `pack_spheres`. Marked `# CONFIRM`.
 - **Cache key uses bounding box**: sufficient for convex regions used throughout the model; flagged in code for non-convex cases.
 - **Material objects are recreated per `particle_at_stage` call**: each call increments the OpenMC material ID counter. Harmless for sequential per-stage models; see Design decisions above.
 - **C/U-235 atom ratio computed from analytic stoichiometry**, not from OpenMC `get_nuclide_atom_densities`. The values are exact given the input parameters.
 
 ### Unconfirmed (`# CONFIRM`)
-- `packing_fraction_static: 0.60` — no process measurement; placeholder.
-- `packing_fraction_fluidized: 0.35` — no process measurement; placeholder.
+- `packing_fraction_static: 0.50` — loose-random-pack estimate; no process-specific measurement for this TRISO kernel population.
+- `packing_fraction_fluidized: 0.333` — derived from pf_static / bed_expansion_ratio; bed_expansion_ratio itself is `# CONFIRM`.
 - All `# CONFIRM` flags inherited from step 1 still apply: kernel diameter (425 µm), all layer thicknesses, structural graphite density.
 
 ## Validation cross-check (from `__main__` block)

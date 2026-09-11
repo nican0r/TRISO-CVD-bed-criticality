@@ -279,8 +279,8 @@ def top10_table(flood_rows: list[dict], bu_rows: list[dict]) -> None:
                Likelihood: single failure (loss of coolant boundary integrity).
 
             2. Bed in collapsed state
-               Nominal: fluidized bed during CVD operation (pf ≈ 0.0625)
-               Required: collapsed/settled bed (pf ≈ 0.50, ~8× denser)
+               Nominal: fluidized bed during CVD operation (pf ≈ 0.333)
+               Required: collapsed/settled bed (pf ≈ 0.50, ~1.5× denser)
                Initiator: loss of process gas flow (pump failure, valve closure,
                           power outage) — simultaneous with or prior to flooding.
                Likelihood: independent failure of process gas system.

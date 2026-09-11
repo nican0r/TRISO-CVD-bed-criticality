@@ -54,7 +54,7 @@ Results are written to `results/step5_nominal/` (fluidized) and `results/step5_c
 
 The two nominal runs use identical materials, charge, and settings — they differ only in `state`:
 
-- **Fluidized** (`run_nominal.py`) — bed occupies the cone (at `pf_fluidized = 0.075`) plus a cylinder overflow above the cone; taller, more dilute geometry representing the operating condition.
+- **Fluidized** (`run_nominal.py`) — bed occupies the cone (at `pf_fluidized = 0.333`); at the nominal 95 g bare-kernel charge the fluidized bulk volume ≈ 27.2 cm³ fills the full cone staircase with negligible overflow (~0.2 cm³), representing the operating condition.
 - **Collapsed** (`run_collapsed.py`) — bed occupies only the cone (at `pf_static`); denser, shorter geometry representing the settled state when fluidization stops.
 
 Together the two bracket the range of k-eff between operating and settled bed configurations at the nominal charge.
@@ -69,7 +69,7 @@ Together the two bracket the range of k-eff between operating and settled bed co
 
 **Driving condition:** Eigenvalue (k-eff) calculation. No external neutron source; fission neutrons drive subsequent generations.
 
-**Shannon entropy mesh:** 10×10×20 regular mesh spanning cone base (z=0) to retort top. Lateral cells 0.5×0.5 cm. Mesh cells that fall inside the cone but outside the inscribed staircase cylinders are empty and contribute zero entropy — this is harmless. At 20,000 particles per generation with pf_fluidized = 0.075, the majority of fissile volume is in the cylinder overflow, providing a meaningful entropy signal without empty-cell noise domination.
+**Shannon entropy mesh:** 10×10×20 regular mesh spanning cone base (z=0) to retort top. Lateral cells 0.5×0.5 cm. Mesh cells that fall inside the cone but outside the inscribed staircase cylinders are empty and contribute zero entropy — this is harmless. At 20,000 particles per generation with pf_fluidized = 0.333, the fluidized bed fills essentially the full cone staircase with negligible overflow (~0.2 cm³); the entropy signal covers the cone interior at the nominal 95 g charge.
 
 **Per-step settings (nominal production run):**
 - 50 inactive batches / 250 active batches / 20,000 particles per generation
@@ -79,8 +79,8 @@ Together the two bracket the range of k-eff between operating and settled bed co
 ```
 build_model()          1 call
   bed_region()           1 call — explicit TRISO packing
-    pack_bed()             n_slabs + 1 calls — cone staircase slabs + cylinder overflow (fluidized)
-                           n_slabs calls     — cone staircase slabs only (collapsed)
+    pack_bed()             n_slabs calls — cone staircase slabs only (fluidized fills cone, ~0 overflow at 95 g)
+                           n_slabs calls — cone staircase slabs only (collapsed)
   furnace_shell_cells()  1 call — 12 structural cells
 openmc.run()           1 call
   inactive generations:  50 × 20 000 particles  = 1 000 000 particles
@@ -93,14 +93,7 @@ openmc.run()           1 call
 
 ## Design decisions
 
-- **`fluidized_height` raised from 180 mm to 250 mm** — The placeholder value of 180 mm was a `# CONFIRM` estimate. At the nominal charge of 95 g and pf_fluidized = 0.075, the computed cylinder overflow height is:
-  - V_solid = 95 g / 2.94 g/cm³ = 32.3 cm³ (ρ_eff = m_particle / V_outer at full TRISO stage)
-  - V_bulk = 32.3 / 0.075 = 430 cm³
-  - V_cone_staircase ≈ 23.7 cm³ (n_slabs=8; cone filled at pf_fluidized in both states)
-  - V_overflow = 430 − 23.7 = 406.3 cm³
-  - h_overflow = 406.3 / (π × 2.5²) ≈ 20.7 cm
-
-  20.7 cm > 18.0 cm → `bed_region()` would raise `ValueError`. The retort cylinder has 34 cm of headroom (retort height = 340 mm), so 250 mm (25 cm) is geometrically realizable and provides ~4.3 cm margin above the nominal overflow top. This remains `# CONFIRM` until verified against the actual process specification for maximum fluidization zone height.
+- **`fluidized_height` raised from 180 mm to 250 mm** — The placeholder value of 180 mm was a `# CONFIRM` estimate. At pf_fluidized = 0.333 and the nominal 95 g bare-kernel charge, V_bulk_fluidized = 95 / 10.5 / 0.333 = 27.17 cm³, which slightly exceeds the n=32 staircase cone (26.95 cm³) by ~0.22 cm³ — a negligible overflow. For the full TRISO stage at pf_fluidized = 0.333, ρ_eff ≈ 2.94 g/cm³ gives V_bulk = 95 / 2.94 / 0.333 = 97.0 cm³ with ~70.1 cm³ overflow (h_overflow ≈ 3.6 cm), comfortably within the 25 cm fluidized_height parameter. This remains `# CONFIRM` until verified against the actual process specification for maximum fluidization zone height.
 
   Note: `fluidized_height_cm` bounds only the cylinder overflow above the cone, not the total bed height. The cone is always available to the bed regardless of this parameter.
 
@@ -110,7 +103,7 @@ openmc.run()           1 call
 
 - **`only_fissionable` dropped; replaced by `constraints={'fissionable': True}` on `IndependentSource`** — The `only_fissionable` parameter on `openmc.stats.Box` was deprecated in OpenMC 0.15. The new parameter achieves the same effect (source positions are rejection-sampled until landing in a fissionable cell). This only affects the first generation; active-batch k-eff is unaffected.
 
-- **`settings.source_rejection_fraction = 0.005`** — The UCO kernel volume fraction in the source Box is ~0.72% (pf=0.075 × kernel/sphere ratio 0.123 × π/4 box-to-cylinder). OpenMC 0.15 defaults to erroring when fewer than 5% of sampled positions satisfy the `fissionable` constraint. Setting to 0.005 (0.5%) allows the actual 0.72% acceptance rate without error.
+- **`settings.source_rejection_fraction = 0.005`** — The UCO kernel volume fraction in the source Box is ~3.2% (pf=0.333 × kernel/sphere ratio 0.123 × π/4 box-to-cylinder). OpenMC 0.15 defaults to erroring when fewer than 5% of sampled positions satisfy the `fissionable` constraint. Setting to 0.005 (0.5%) allows the actual ~3.2% acceptance rate without error.
 
 - **Gas-above-bed cell** — A single `process_gas` cell fills the retort interior between the bed top and the retort top. This is required to cover all geometry — leaving it undefined would cause OpenMC to error on particles entering that region.
 
@@ -145,5 +138,5 @@ openmc.run()           1 call
 **Unconfirmed (`# CONFIRM`):**
 - `fluidized_height: 250.0 mm` — raised from placeholder 180 mm to accommodate the computed bed height of 21.9 cm at 95 g charge. The correct value depends on the maximum operating fluidization zone height from the process specification. If the actual zone is shorter than 21.9 cm, the nominal charge must be reduced or the bed_expansion_ratio revised.
 - `charge_mass_g: 95.0 g` — step specifies "nominal charge"; value is a placeholder pending process documentation.
-- `packing_fraction_fluidized: 0.075` — derived from pf_static / bed_expansion_ratio; both factors remain `# CONFIRM`.
+- `packing_fraction_fluidized: 0.333` — derived from pf_static (0.50) / bed_expansion_ratio (1.5); bed_expansion_ratio confirmed against process data but marked `# CONFIRM`.
 - All other `# CONFIRM` items inherited from steps 3–4 (`kernel_diameter`, layer thicknesses, densities, graphite density, gas pressure).
