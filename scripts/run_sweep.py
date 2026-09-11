@@ -37,12 +37,17 @@ _MASS_SWEEP_CSV = _RESULTS_DIR / 'mass_sweep.csv'
 _MASS_SWEEP_DIR = _RESULTS_DIR / 'mass_sweep'
 
 # Nominal charge is 95 g (params.yaml).  Multipliers span 1× to 40× nominal.
-# Vessel capacity at the loose-random-pack collapsed pf (0.50) is ~3653 g, so
-# the 40× point (3800 g) is auto-skipped by the precheck; the grid is kept
-# intact so the intended coverage is legible and the skip is recorded rather
-# than hidden.  See docs/steps/step-7-mass-packing-sweeps.md §Packing-fraction
-# change for why pf is 0.50 rather than 0.60.
-_MASS_MULTIPLIERS = (1.0, 1.5, 2.0, 3.0, 5.0, 10.0, 20.0, 40.0)
+# Grid spans 2× – 38× the nominal 95 g charge (190 g – 3610 g).
+# 1× and 1.5× are excluded: the nominal collapsed-bed case is already the
+# step-6 reference run, and the engineering question is about accumulation
+# above the operating charge, not below it.
+# 38× (3610 g) is the practical ceiling: the retort's usable volume at
+# pf_static = 0.50 holds at most 3653 g of bare kernel, so 38× leaves only a
+# ~43 g margin before the bed overflows the vacuum boundary.  Any multiplier
+# above 38× (e.g. 40× = 3800 g) would be auto-skipped by vessel_capacity_g.
+# See docs/steps/step-7-mass-packing-sweeps.md §Packing-fraction change for
+# why pf is 0.50 rather than 0.60.
+_MASS_MULTIPLIERS = (2.0, 3.0, 5.0, 10.0, 20.0, 38.0)
 
 _SEED_CHECK_CASES = [
     {'tag': 'seed_42', 'overrides': {'model': {'seed': 42}}},
