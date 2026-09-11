@@ -6,6 +6,8 @@ __pycache__/
 results/*.csv
 results/*.png
 results/*.h5
+results/**/*.xml
+results/**/*.out
 statepoint.*.h5
 summary.h5
 
