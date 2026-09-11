@@ -81,19 +81,46 @@ def pack_slab_worker(args: tuple) -> tuple[str, int, float, str | None]:
     import openmc  # import inside worker to avoid fork issues
     import openmc.model
 
-    cyl = openmc.ZCylinder(r=r_slab)
-    zp_bot = openmc.ZPlane(z0=z_bot)
-    zp_top = openmc.ZPlane(z0=z_top)
-    region = -cyl & +zp_bot & -zp_top
+    # Thin-slab / narrow-cylinder guard: mirrors the logic in triso.py pack_bed.
+    _TRIGGER_DIAMETERS = 2.5
+    _NARROW_R_RADII = 15.0
+    _MIN_H_DIAMETERS = 5.0
+
+    z_extent = z_top - z_bot
+    trigger_h = _TRIGGER_DIAMETERS * 2.0 * r_particle
+    narrow_cylinder = r_slab / r_particle < _NARROW_R_RADII
+    min_h = _MIN_H_DIAMETERS * 2.0 * r_particle
 
     t0 = time.time()
     try:
-        centers = openmc.model.pack_spheres(
-            radius=r_particle,
-            region=region,
-            pf=pf,
-            seed=seed,
-        )
+        if (z_extent < trigger_h or narrow_cylinder) and min_h > z_extent:
+            z_top_ext = z_bot + min_h
+            ext_region = (
+                -openmc.ZCylinder(r=r_slab)
+                & +openmc.ZPlane(z0=z_bot)
+                & -openmc.ZPlane(z0=z_top_ext)
+            )
+            pf_ext = pf * z_extent / min_h
+            all_centers = openmc.model.pack_spheres(
+                radius=r_particle,
+                region=ext_region,
+                pf=pf_ext,
+                seed=seed,
+            )
+            mask = (all_centers[:, 2] - r_particle >= z_bot) & \
+                   (all_centers[:, 2] + r_particle <= z_top)
+            centers = all_centers[mask]
+        else:
+            cyl = openmc.ZCylinder(r=r_slab)
+            zp_bot = openmc.ZPlane(z0=z_bot)
+            zp_top = openmc.ZPlane(z0=z_top)
+            region = -cyl & +zp_bot & -zp_top
+            centers = openmc.model.pack_spheres(
+                radius=r_particle,
+                region=region,
+                pf=pf,
+                seed=seed,
+            )
     except Exception as e:
         return label, 0, time.time() - t0, str(e)
 

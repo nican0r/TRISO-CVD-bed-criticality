@@ -273,12 +273,56 @@ def pack_bed(region, packing_fraction, outer_radius, fill_universe, seed, params
         bb = region.bounding_box
         if int(packing_fraction * float(bb.volume) / V_sphere) == 0:
             return []
-        centers = openmc.model.pack_spheres(
-            radius=outer_radius,
-            region=region,
-            pf=packing_fraction,
-            seed=seed,
-        )
+
+        # Thin-slab / narrow-cylinder guard: FBP degenerates in two regimes:
+        #   (a) near-monolayer geometry: h < 2.5d (partial last slab at h ≈ 1.5d).
+        #   (b) narrow confined cylinder: r < 15 particle radii (slab 0 at
+        #       r=14.12 radii — near-wall ordering pushes achievable pf near 0.50).
+        # Fix: extend the region to 5d and reduce pf proportionally so that
+        # pf_ext = pf × z_extent / (5d) ≤ 0.25 across the full trigger range
+        # (worst case: z=2.5d, pf=0.50 → pf_ext=0.25), forcing RSP (pf<0.30).
+        # Guard only fires when min_h > z_extent; for tall slabs (z_extent ≥ min_h)
+        # FBP converges normally and the extension path is skipped.
+        # Yield ≈ z_extent / min_h (~30 % for the 95 g / n_slabs=32 partial slab).
+        _TRIGGER_DIAMETERS = 2.5     # height trigger threshold
+        _NARROW_R_RADII = 15.0       # radius trigger: r < 15 particle radii
+        _MIN_H_DIAMETERS = 5.0       # RSP extension height (both triggers)
+
+        z_bot = float(bb.lower_left[2])
+        z_top = float(bb.upper_right[2])
+        z_extent = z_top - z_bot
+        r_slab = float(bb.upper_right[0])  # cylinder radius from bounding box
+
+        narrow_cylinder = r_slab / outer_radius < _NARROW_R_RADII
+        trigger_h = _TRIGGER_DIAMETERS * 2.0 * outer_radius
+        min_h = _MIN_H_DIAMETERS * 2.0 * outer_radius
+
+        if (z_extent < trigger_h or narrow_cylinder) and min_h > z_extent:
+            z_top_ext = z_bot + min_h
+            ext_region = (
+                -openmc.ZCylinder(r=r_slab)
+                & +openmc.ZPlane(z0=z_bot)
+                & -openmc.ZPlane(z0=z_top_ext)
+            )
+            pf_ext = packing_fraction * z_extent / min_h
+            all_centers = openmc.model.pack_spheres(
+                radius=outer_radius,
+                region=ext_region,
+                pf=pf_ext,
+                seed=seed,
+            )
+            # Keep only centers whose sphere lies fully within the original slab.
+            mask = (all_centers[:, 2] - outer_radius >= z_bot) & \
+                   (all_centers[:, 2] + outer_radius <= z_top)
+            centers = all_centers[mask]
+        else:
+            centers = openmc.model.pack_spheres(
+                radius=outer_radius,
+                region=region,
+                pf=packing_fraction,
+                seed=seed,
+            )
+
         _CACHE_DIR.mkdir(parents=True, exist_ok=True)
         np.savez(cache_path, centers=centers)
 

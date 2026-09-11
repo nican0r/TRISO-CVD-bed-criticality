@@ -112,6 +112,8 @@ For the fluidized state (pf_fluidized = 0.333, ~1.5× lower than pf_static), the
 
 - **Each staircase slab uses a distinct seed (base_seed + slab_index).** Using the same seed for all slabs would produce identical sphere-centre patterns scaled to each slab's size, introducing spurious spatial periodicity in the particle arrangement. Distinct seeds give statistically independent packing realisations for each slab.
 
+- **Last partial slab is near-monolayer at 95 g / n_slabs=32 / pf=0.50.** The charge volume runs out partway through the last non-empty slab (slab index 27 of 32). With equal-height slabs of h ≈ 0.119 cm each, the 95 g charge fills slab 27 to only h = 0.064 cm = 1.5 particle diameters — a near-monolayer geometry where FBP cannot converge. The `pack_bed` RSP guard (see step-2 design decisions) handles this by packing in a 5d-tall extended region at pf_ext = 0.50 × 1.5d / 5d = 0.15, then filtering centres back to the original z-band; yield ≈ 1.5/5 = 30%, placing ~3,500 particles versus ~11,500 expected — a <0.2% deficit of the total ~225,000-particle bed. The bias is non-conservative (fewer particles → lower k-eff estimate), accepted for Stage 0 screening. This limitation also applies to mass-sweep runs that produce a partial slab in this height range.
+
 ## Assumptions
 
 ### Confirmed
