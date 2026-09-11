@@ -114,9 +114,9 @@ def process_gas(params: types.MappingProxyType) -> openmc.Material:
     from params mole_fractions and treated as void — it contributes nothing to
     moderation at these densities.
 
-    Density is computed from the ideal gas law at the operating conditions stored
-    in params (gas.temperature_k, gas.pressure_pa). The material cross-section
-    temperature is set to 293.6 K (room temperature bounding case).
+    Density is computed from the ideal gas law at 293.6 K (room temperature),
+    101325 Pa, consistent with the room-temperature bounding case used for all
+    material cross-section temperatures. This gives ρ ≈ 2.06×10⁻⁴ g/cm³.
 
     MTS = CH3SiCl3: M = 12.011 + 3*1.008 + 28.086 + 3*35.453 = 149.480 g/mol
     """
@@ -129,9 +129,8 @@ def process_gas(params: types.MappingProxyType) -> openmc.Material:
     M_avg = x_H2 * M_H2 + x_MTS * M_MTS
 
     # Ideal gas: ρ [g/m3] = P [Pa] * M [g/mol] / (R [J/mol/K] * T [K]); ×1e-6 → g/cm3
-    T = g['temperature_k']
     P = g['pressure_pa']
-    rho_gcc = P * M_avg / (_R * T) * 1e-6
+    rho_gcc = P * M_avg / (_R * _ROOM_TEMP_K) * 1e-6
 
     m = openmc.Material(name='process_gas')
     m.set_density('g/cm3', rho_gcc)

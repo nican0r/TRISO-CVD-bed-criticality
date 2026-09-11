@@ -14,7 +14,7 @@ status: complete
   - `opyc(params)` — outer PyC (1.87 g/cm³, c_Graphite)
   - `graphite_structural(params)` — retort, heater, cone (1.75 g/cm³, c_Graphite)
   - `graphite_felt_insulation(params)` — insulation blanket (0.20 g/cm³, c_Graphite)
-  - `process_gas(params)` — H₂/MTS CVD atmosphere; density from ideal gas at operating T/P
+  - `process_gas(params)` — H₂/MTS CVD atmosphere; density from ideal gas at 293.6 K, 101325 Pa
   - `water(density)` — light water factory for flooding sweeps (c_H_in_H2O)
   - `air()` — standard dry air for the vented unflooded condition
 - `_print_material_table()` and `_verify_u235_atom_density()` helper functions for the diagnostic check block.
@@ -22,7 +22,7 @@ status: complete
 
 ## How it works
 
-Each factory creates an `openmc.Material`, sets density and composition via `add_element()` with explicit atom-fraction percent type, attaches S(α,β) tables where appropriate, and sets the temperature to 293.6 K. The params dict (a frozen MappingProxyType from `load_params()`) is the sole source of numeric values; no constants are hardcoded in the material functions. The process gas density is computed from the ideal gas law using operating conditions stored in `params['gas']`, making it automatically swappable via params changes. The water factory takes density as an argument to support continuous flooding density sweeps without touching params.
+Each factory creates an `openmc.Material`, sets density and composition via `add_element()` with explicit atom-fraction percent type, attaches S(α,β) tables where appropriate, and sets the temperature to 293.6 K. The params dict (a frozen MappingProxyType from `load_params()`) is the sole source of numeric values; no constants are hardcoded in the material functions. The process gas density is computed from the ideal gas law at 293.6 K and the pressure stored in `params['gas']`, consistent with the room-temperature bounding case. The water factory takes density as an argument to support continuous flooding density sweeps without touching params.
 
 ## Experimental design
 
@@ -42,7 +42,7 @@ No simulation is run in this step. Materials are constructed and checked analyti
 
 - **What happens to k-eff if c_Graphite is omitted from structural graphite.** Without `c_Graphite`, OpenMC applies free-gas scattering to carbon, which treats graphite atoms as independent scatterers at the material temperature. This misses the crystal phonon modes that make graphite such an effective thermaliser at thermal neutron energies (the 1/v and sub-thermal enhancement). The practical effect is that the free-gas model under-thermalises neutrons, hardening the spectrum and reducing the fission cross-section weighted flux. Published comparisons for graphite-moderated systems show k-eff differences of 2–5% between free-gas and c_Graphite treatments; in a geometry where graphite is the primary moderator, this is not conservative and would give a false subcritical margin.
 
-- **Gas density computed at operating T/P (1873 K, 101325 Pa), not room temperature.** The gas represents the CVD atmosphere at process conditions. Using 1873 K gives ρ ≈ 3.23×10⁻⁵ g/cm³, which is the physically correct in-furnace gas density. The nuclear cross-section temperature is still 293.6 K (room temperature bounding case). Note: using room-temperature gas density (293.6 K) would give a ~6.4× higher density (≈ 2.07×10⁻⁴ g/cm³), which would be more conservative for NCS because it represents more hydrogen present. This tradeoff was not flagged as a concern at this stage since the gas contribution to k-eff is small regardless of which temperature is used.
+- **Gas density computed at 293.6 K, 101325 Pa.** The CVD gas composition (98 mol% H₂ + 2 mol% MTS) is held at the SiC-step process conditions as the worst-case hydrogen-rich atmosphere, but the density used in the model is the room-temperature ideal-gas value: ρ ≈ 2.06×10⁻⁴ g/cm³. This is consistent with the 293.6 K cross-section temperature applied to all materials in the room-temperature bounding case.
 
 - **Air composition: N₂, O₂, Ar only (NIST standard dry air); CO₂ neglected.** CO₂ is 0.036 mol% of dry air; its contribution to neutron interaction is negligible. Density computed from ideal gas at 293.6 K, 101325 Pa.
 
@@ -54,7 +54,7 @@ No simulation is run in this step. Materials are constructed and checked analyti
 - UCO kernel: U(C₀.₅O₀.₄) atom fractions, 19.75 wt% U-235, 10.5 g/cm³. Source: [AGR1]/[INL].
 - Buffer: pure C, 1.0 g/cm³; IPyC/OPyC: pure C, 1.87 g/cm³; SiC: 1:1 Si:C, 3.20 g/cm³. Source: [INL] Table 3.
 - c_Graphite S(α,β) applied to buffer, IPyC, OPyC, and structural graphite. c_H_in_H2O applied to water.
-- Process gas: 98 mol% H₂ + 2 mol% CH₃SiCl₃ at 101325 Pa, 1873 K (SiC CVD step).
+- Process gas: 98 mol% H₂ + 2 mol% CH₃SiCl₃ (SiC CVD step composition); density at 293.6 K, 101325 Pa (ρ ≈ 2.06×10⁻⁴ g/cm³).
 - All material temperatures: 293.6 K (room temperature, cold-bounding case).
 - Structural graphite boron impurity: 0 ppm (NCS convention, no unconfirmed poisons credited).
 
@@ -62,7 +62,6 @@ No simulation is run in this step. Materials are constructed and checked analyti
 - SiC has no S(α,β) applied. Could add `c_SiC` but not credited at this stage.
 - Air composition from NIST standard dry air (N₂/O₂/Ar); CO₂ neglected.
 - U-234 content in HALEU: OpenMC's built-in U-234/U-235 = 0.008 mass ratio approximation used. May be inaccurate for cascade-enriched HALEU.
-- Gas density computed at operating T (1873 K), not room temperature. Slightly non-conservative; the effect on k-eff is small because gas contributes very little moderation regardless.
 
 ### Unconfirmed (`# CONFIRM`)
 - `graphite_structural_density_gcc` = 1.75 g/cm³ — placeholder; actual furnace graphite grade may differ.
