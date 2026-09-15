@@ -8,8 +8,12 @@ Coordinate system: z=0 at the nozzle-to-cone junction plane, z increases upward.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
+import warnings
 
+import numpy as np
 import openmc
 import openmc.model
 
@@ -20,6 +24,7 @@ from furnace.triso import (
     _stage_outer_radius,
     _shell_vol,
     particle_mass_g,
+    _CACHE_DIR,
 )
 
 
@@ -347,29 +352,38 @@ def bed_region(params, state, stage, n_slabs, background_material, charge_mass_g
                 f"{fluidized_height_cm:.3f} cm. Reduce charge_mass_g or check bed_expansion_ratio."
             )
 
-        z_ov_bot = z_cone_top
-        z_ov_top = z_cone_top + h_overflow
+        if h_overflow < 2.0 * outer_r:
+            # Overflow thinner than one particle diameter — no TRISO can fit.
+            # This arises when V_bulk barely exceeds V_staircase due to the
+            # inscribed-staircase volume shortfall (~4.7% at n_slabs=32).
+            # Absorb the residual bulk into the last cone slab: the gas-above-bed
+            # cell in model.py starts at max(bed_height, z_cone_top), so setting
+            # bed_height_cm = z_last_fill_top leaves no geometry gap.
+            bed_height_cm = z_last_fill_top
+        else:
+            z_ov_bot = z_cone_top
+            z_ov_top = z_cone_top + h_overflow
 
-        cyl_ret = openmc.ZCylinder(r=r_retort)
-        zp_ov_bot = openmc.ZPlane(z0=z_ov_bot)
-        zp_ov_top = openmc.ZPlane(z0=z_ov_top)
-        region_ov = -cyl_ret & +zp_ov_bot & -zp_ov_top
+            cyl_ret = openmc.ZCylinder(r=r_retort)
+            zp_ov_bot = openmc.ZPlane(z0=z_ov_bot)
+            zp_ov_top = openmc.ZPlane(z0=z_ov_top)
+            region_ov = -cyl_ret & +zp_ov_bot & -zp_ov_top
 
-        ov_fill = _flood_fill(z_ov_bot, background_material, dry_material, z_flood)
-        seed = base_seed + slab_index
-        trisos_ov = pack_bed(region_ov, pf, outer_r, fill_univ, seed, params)
-        lattice_ov = lattice_bed(
-            trisos_ov,
-            lower_left=(-r_retort, -r_retort, z_ov_bot),
-            upper_right=(r_retort, r_retort, z_ov_top),
-            background_material=ov_fill,
-            pitch_target=pitch_target,
-        )
-        all_cells.append(openmc.Cell(fill=lattice_ov, region=region_ov))
-        all_trisos.extend(trisos_ov)
-        total_particles += len(trisos_ov)
+            ov_fill = _flood_fill(z_ov_bot, background_material, dry_material, z_flood)
+            seed = base_seed + slab_index
+            trisos_ov = pack_bed(region_ov, pf, outer_r, fill_univ, seed, params)
+            lattice_ov = lattice_bed(
+                trisos_ov,
+                lower_left=(-r_retort, -r_retort, z_ov_bot),
+                upper_right=(r_retort, r_retort, z_ov_top),
+                background_material=ov_fill,
+                pitch_target=pitch_target,
+            )
+            all_cells.append(openmc.Cell(fill=lattice_ov, region=region_ov))
+            all_trisos.extend(trisos_ov)
+            total_particles += len(trisos_ov)
 
-        bed_height_cm = z_ov_top
+            bed_height_cm = z_ov_top
     else:
         bed_height_cm = z_last_fill_top
 
@@ -391,6 +405,224 @@ def bed_region(params, state, stage, n_slabs, background_material, charge_mass_g
         'bed_height_cm': bed_height_cm,   # absolute z of bed top
         'z_bed_bot_cm': 0.0,              # bed always starts at cone base (z=0)
         'n_particles': total_particles,
+        'background_mat': background_material,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Exact-cone reference geometry (validation only)
+# ---------------------------------------------------------------------------
+
+def _exact_cone_cache_key(params, target_n: int, outer_radius: float, base_seed: int) -> str:
+    dim = params['dimensions']
+    payload = json.dumps({
+        'type': 'exact_cone_v1',
+        'r_throat_cm': round(dim['nozzle']['throat_diameter_cm'] / 2.0, 8),
+        'r_retort_cm': round(dim['retort']['id_cm'] / 2.0, 8),
+        'z_cone_top_cm': round(dim['cone']['vertical_drop_cm'], 8),
+        'half_angle_deg': round(dim['cone']['included_angle_deg'] / 2.0, 8),
+        'target_n': int(target_n),
+        'r_outer': round(outer_radius, 8),
+        'seed': int(base_seed),
+    }, sort_keys=True)
+    return 'ec_' + hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
+def _cone_acceptance_mask(centers: np.ndarray, outer_radius: float,
+                          z_apex: float, tan_theta: float, z_cone_top: float) -> np.ndarray:
+    """Boolean mask: True if the sphere body clears the cone wall and both planes.
+
+    Perpendicular clearance to the cone surface:
+        d_perp = cos(θ) × (r_cone(z) − ρ)   where r_cone(z) = tan(θ)·(z − z_apex)
+    A sphere of radius r clears the wall when d_perp ≥ r.
+    It clears the floor (z=0) when z ≥ r, and the ceiling (z=z_cone_top) when z ≤ z_cone_top − r.
+    """
+    z = centers[:, 2]
+    rho = np.hypot(centers[:, 0], centers[:, 1])
+    cos_theta = 1.0 / np.sqrt(1.0 + tan_theta ** 2)
+    d_perp = cos_theta * (tan_theta * (z - z_apex) - rho)
+    return (
+        (d_perp >= outer_radius)
+        & (z >= outer_radius)
+        & (z <= z_cone_top - outer_radius)
+    )
+
+
+def exact_cone_bed(params, state: str, stage: str, background_material,
+                   charge_mass_g: float | None = None, seed: int | None = None,
+                   z_flood: float | None = None, dry_material=None) -> dict:
+    """Pack the true frustum by rejection sampling — validation-only reference geometry.
+
+    Does not use the staircase approximation.  Sphere centres are placed in the
+    bounding cylinder (r=r_retort, z in [0, z_cone_top]) by pack_spheres, then
+    any sphere whose body intersects the cone surface or the floor/ceiling planes
+    is discarded.  pf_trial in the bounding cylinder is iterated until the
+    surviving count matches the charge mass to within 0.5 %.
+
+    The accepted centres are cached under cases/.triso_cache/ with an 'ec_' key
+    prefix distinct from staircase-packing cache keys.
+
+    Returns the same dict structure as bed_region(), with cone_void_cells=[].
+    """
+    if state not in ('fluidized', 'collapsed'):
+        raise ValueError(f"state must be 'fluidized' or 'collapsed', got {state!r}")
+
+    dim = params['dimensions']
+    mdl = params['model']
+
+    if charge_mass_g is None:
+        charge_mass_g = float(dim['bed']['charge_mass_g'])
+
+    pf_static = float(mdl['packing_fraction_static'])
+    pf = pf_static if state == 'collapsed' else pf_static / float(mdl['bed_expansion_ratio'])
+    max_pf = float(mdl['max_packing_fraction'])
+
+    r_throat = dim['nozzle']['throat_diameter_cm'] / 2.0
+    r_retort = dim['retort']['id_cm'] / 2.0
+    z_cone_top = dim['cone']['vertical_drop_cm']
+    half_angle_rad = math.radians(dim['cone']['included_angle_deg'] / 2.0)
+    tan_theta = math.tan(half_angle_rad)
+    z_apex = -r_throat / tan_theta
+
+    outer_r = _stage_outer_radius(stage, params)
+    rho_eff = _particle_effective_density(stage, params)
+    V_solid = charge_mass_g / rho_eff
+    V_bulk = V_solid / pf
+
+    base_seed = int(seed) if seed is not None else int(mdl['seed'])
+    fill_univ, _ = particle_at_stage(stage, params)
+    pitch_target = max(4.0 * outer_r, 0.20)
+
+    target_n = int(round(charge_mass_g / particle_mass_g(stage, params)))
+    v_sphere = _shell_vol(outer_r)
+    v_bounding_cyl = math.pi * r_retort ** 2 * z_cone_top
+    v_frustum = frustum_volume(r_retort, r_throat,
+                               half_angle_deg=dim['cone']['included_angle_deg'] / 2.0)
+
+    cache_key = _exact_cone_cache_key(params, target_n, outer_r, base_seed)
+    cache_path = _CACHE_DIR / f'{cache_key}.npz'
+
+    if cache_path.exists():
+        accepted = np.load(cache_path)['centers']
+    else:
+        bound_cyl  = openmc.ZCylinder(r=r_retort)
+        bound_zbot = openmc.ZPlane(z0=0.0)
+        bound_ztop = openmc.ZPlane(z0=z_cone_top)
+        bounding_region = -bound_cyl & +bound_zbot & -bound_ztop
+
+        # Initial pf_trial: scale up from frustum density to bounding-cylinder density,
+        # correcting for geometric acceptance (~V_frustum/V_cyl) and a 30% wall-depletion margin.
+        acceptance_est = v_frustum / v_bounding_cyl
+        pf_trial = min(
+            target_n * v_sphere / v_bounding_cyl / acceptance_est * 1.3,
+            max_pf * 0.95,
+        )
+
+        accepted = np.empty((0, 3))
+        current_seed = base_seed
+        n_acc = 0
+        for attempt in range(30):
+            all_centers_list = openmc.model.pack_spheres(
+                radius=outer_r,
+                region=bounding_region,
+                pf=pf_trial,
+                seed=current_seed,
+            )
+            if len(all_centers_list) == 0:
+                pf_trial = min(pf_trial * 2.0, max_pf * 0.99)
+                current_seed += 1
+                continue
+
+            all_centers = np.array([[c[0], c[1], c[2]] for c in all_centers_list])
+            mask = _cone_acceptance_mask(all_centers, outer_r, z_apex, tan_theta, z_cone_top)
+            accepted = all_centers[mask]
+            n_acc = len(accepted)
+
+            tol = max(1, int(round(0.005 * target_n)))
+            if n_acc >= target_n - tol:
+                if n_acc > target_n + tol:
+                    rng = np.random.default_rng(base_seed + 9999)
+                    idx = rng.choice(n_acc, target_n, replace=False)
+                    accepted = accepted[idx]
+                break
+
+            # Scale pf_trial proportionally to the shortfall
+            pf_trial = min(pf_trial * (target_n / max(n_acc, 1)) * 1.15, max_pf * 0.99)
+            current_seed += 1
+        else:
+            warnings.warn(
+                f"exact_cone_bed: did not converge after 30 attempts; "
+                f"accepted {n_acc}/{target_n} particles. Using available particles.",
+                stacklevel=2,
+            )
+
+        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        np.savez(cache_path, centers=accepted)
+
+    # Build the frustum cell — one bed cell spanning the entire cone interior.
+    cone_surf = openmc.ZCone(z0=z_apex, r2=tan_theta ** 2)
+    zp_cone_bot = openmc.ZPlane(z0=0.0)
+    zp_cone_top_plane = openmc.ZPlane(z0=z_cone_top)
+
+    bed_fill = _flood_fill(0.0, background_material, dry_material, z_flood)
+    frustum_region = -cone_surf & +zp_cone_bot & -zp_cone_top_plane
+
+    trisos = [openmc.model.TRISO(outer_r, fill_univ, tuple(c.tolist())) for c in accepted]
+    lattice = lattice_bed(
+        trisos,
+        lower_left=(-r_retort, -r_retort, 0.0),
+        upper_right=(r_retort, r_retort, z_cone_top),
+        background_material=bed_fill,
+        pitch_target=pitch_target,
+    )
+    frustum_cell = openmc.Cell(fill=lattice, region=frustum_region)
+
+    n_actual = len(trisos)
+    V_actual_solid = n_actual * v_sphere
+    pf_achieved = V_actual_solid / V_bulk
+
+    # Overflow into retort cylinder if charge exceeds cone volume
+    overflow_cells: list[openmc.Cell] = []
+    extra_trisos: list = []
+    bed_height_cm = z_cone_top
+    remaining_solid = V_solid - V_actual_solid
+
+    if remaining_solid > 1e-10 and V_bulk > v_frustum:
+        remaining_bulk = remaining_solid / pf
+        h_overflow = remaining_bulk / (math.pi * r_retort ** 2)
+        z_ov_bot = z_cone_top
+        z_ov_top = z_cone_top + h_overflow
+        cyl_ret = openmc.ZCylinder(r=r_retort)
+        zp_ov_bot = openmc.ZPlane(z0=z_ov_bot)
+        zp_ov_top = openmc.ZPlane(z0=z_ov_top)
+        region_ov = -cyl_ret & +zp_ov_bot & -zp_ov_top
+        ov_fill = _flood_fill(z_ov_bot, background_material, dry_material, z_flood)
+        trisos_ov = pack_bed(region_ov, pf, outer_r, fill_univ, base_seed + 9000, params)
+        lattice_ov = lattice_bed(
+            trisos_ov,
+            lower_left=(-r_retort, -r_retort, z_ov_bot),
+            upper_right=(r_retort, r_retort, z_ov_top),
+            background_material=ov_fill,
+            pitch_target=pitch_target,
+        )
+        overflow_cells.append(openmc.Cell(fill=lattice_ov, region=region_ov))
+        extra_trisos.extend(trisos_ov)
+        bed_height_cm = z_ov_top
+
+    all_trisos = trisos + extra_trisos
+    n_total = len(all_trisos)
+    pf_achieved = (n_total * v_sphere) / V_bulk
+
+    return {
+        'cells': [frustum_cell] + overflow_cells,
+        'cone_void_cells': [],    # no staircase gaps: frustum surface is the cell boundary
+        'trisos': all_trisos,
+        'pf_achieved': pf_achieved,
+        'V_bulk_cm3': V_bulk,
+        'V_solid_cm3': V_solid,
+        'bed_height_cm': bed_height_cm,
+        'z_bed_bot_cm': 0.0,
+        'n_particles': n_total,
         'background_mat': background_material,
     }
 

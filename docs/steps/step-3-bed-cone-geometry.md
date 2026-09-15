@@ -31,66 +31,58 @@ The cone region is approximated as `n_slabs` equal-height inscribed cylinders, e
 
 ### Convergence study (`scripts/run_convergence.py`)
 
-**Purpose**: Determine the minimum `n_slabs` such that the staircase discretisation introduces less than one statistical sigma error in k-eff relative to a twice-finer discretisation.
+**Purpose**: Quantify the k-eff bias introduced by the staircase cone discretisation relative to a rejection-sampled exact-frustum reference, using real packed-particle geometries (not homogenised surrogates).  Determine whether the current production value n_slabs=32 is adequate, and whether n=16 or n=8 are acceptable alternatives.
 
-**Geometry**: Nozzle throat (graphite) + cone staircase (inscribed bed cylinders + graphite wall) + collapsed bed overflow in retort cylinder. Outer boundary: vacuum at retort inner cylinder.
+**Exact-cone reference**: A reference geometry packs the true frustum by rejection sampling: pack the bounding cylinder (r=r_retort, z in [0, z_cone_top]) at elevated pf_trial, then discard every kernel whose sphere intersects the cone surface (perpendicular clearance < r_kernel) or the floor/ceiling planes. pf_trial is iterated until the surviving count matches the charge mass to within 0.5%. Results are cached. This is validation-only code; it replaces the n→∞ extrapolation used in the homogenised study.
 
-**Materials**: Water at 1.0 g/cm³ as bed background (maximises moderation, giving the most sensitive geometry test); graphite_structural for cone wall and throat.
+**Seed replicates**: Five independent packing seeds per configuration. The across-seed standard deviation is the error bar for all comparisons. Per-run Monte Carlo sigma is reported separately.
 
-**Stage**: `bare_kernel` (smallest particle, highest packing density at fixed mass, most sensitive to cone discretisation).
-
-**State**: `collapsed` (the staircase approximation only affects the collapsed geometry; the fluidized bed is a simple cylinder above the cone regardless of n_slabs).
-
-**n_slabs values**: {4, 8, 16, 32}
-
-**Convergence criterion**: δk_disc(n) = |k(n) − k(2n)| < σ(2n) (one sigma of the finer run)
-
-**Note on state choice**: The staircase approximation now affects both the collapsed and fluidized states (particles occupy the cone in both cases). The collapsed state is the more sensitive test because pf_static (0.50) is ~1.5× higher than pf_fluidized (0.333), so geometric volume errors translate to larger particle-count errors per slab in the collapsed case. Results from the collapsed convergence study are conservative for the fluidized case.
-
-**Settings**: Uses `params.model.batches`, `params.model.inactive`, `params.model.particles`, `params.model.seed` from params.yaml. For preliminary convergence screening the default particle count (1000) is sufficient to distinguish large discretisation errors; production runs should use ≥50 000 particles.
-
-**Outputs**:
-- Console table: n_slabs | V_staircase_cm3 | V_error_pct | k_eff ± σ | δk_disc
-- `results/convergence_n_slabs.csv`
-- OpenMC state-point files in `cases/convergence_n{n}/`
+**Run matrix**: Collapsed bed state, bare_kernel stage, nominal charge mass (95 g), full-flood background (water at 1.0 g/cm³, z_flood=999 cm).
+- Configurations: exact_cone (reference), n=32 (current production), n=16, n=8
+- Full flood is the bounding case for criticality; the convergence bias is measured at worst-case moderation rather than at nominal gas conditions
+- 5 seeds × 4 configurations = 20 jobs via AWS Batch
 
 **Run command**:
 ```
-caffeinate python scripts/run_convergence.py
+python scripts/run_convergence.py [--local-check] [--submit | --dry-run]
 ```
+
+**Outputs** (after `pull_results.py`):
+- Table: config | mean k-eff | across-seed σ | mean MC σ | achieved pf | requested pf | pf deviation | bias vs exact-cone
+- Manifest: `manifests/step3_convergence.json`
+
+The primary diagnostic is **achieved vs requested packing fraction per configuration**. Interface depletion — fewer particles placed near slab boundaries than the bulk packing fraction implies — appears as `pf_achieved < pf_requested`, and the deficit is expected to grow with decreasing n_slabs. A large pf deficit at n=32 would indicate that slab boundaries are removing a significant particle fraction, and the k-eff bias against the exact-cone reference would confirm the neutronics impact.
 
 ### Results and n_slabs selection
 
-Results from `scripts/run_convergence.py` at pf_static = 0.50, bare_kernel stage, water background:
+**Previous homogenised study (superseded)**
 
-| n_slabs | V_staircase (cm³) | V_error (%) | ΔV/V_bulk (%) | k_eff | δk_disc |
-|---------|-------------------|-------------|---------------|-------|---------|
-| 4  | 19.54 | 30.9% | 48.4% | 0.02638 | 2.87×10⁻⁴ |
-| 8  | 23.66 | 16.4% | 25.6% | 0.02609 | 1.56×10⁻⁴ |
-| 16 | 25.84 |  8.7% | 13.6% | 0.02594 | 5.32×10⁻⁵ |
-| 32 | 26.95 |  4.7% |  7.4% | 0.02588 | — |
+An earlier version of this study used homogenised (smeared) bed materials instead of explicit TRISO packing, and tested both water and gas backgrounds. Results at pf_static = 0.50, bare_kernel stage, water background, 1 000 particles per batch:
 
-*Run conditions: 1 000 particles, 300 batches (50 inactive + 250 active), seed 42, pf=0.50, V_bulk=18.10 cm³.*
+| n_slabs | V_error (%) | ΔV/V_bulk (%) | k_eff | σ | δk_disc |
+|---------|-------------|---------------|-------|---|---------|
+| 4  | 30.9% | 48.4% | 0.02638 | 4×10⁻⁵ | 2.87×10⁻⁴ |
+| 8  | 16.4% | 25.6% | 0.02609 | 4×10⁻⁵ | 1.56×10⁻⁴ |
+| 16 |  8.7% | 13.6% | 0.02594 | 4×10⁻⁵ | 5.32×10⁻⁵ |
+| 32 |  4.7% |  7.4% | 0.02588 | 4×10⁻⁵ | 3.83×10⁻⁵ |
+| 64 |  2.7% |  4.3% | 0.02585 | 4×10⁻⁵ | — |
 
-**Selected: n_slabs = 32.**
+That study selected n_slabs = 32 based on the δk_disc < σ(2n) criterion. Homogenisation omits TRISO self-shielding and grain-structure effects; the δk_disc comparisons conflate geometry and packing. The study correctly identified the monotonic direction of bias (staircase overestimates k-eff by displacing particles from the cone to the cylinder) but cannot quantify the bias magnitude for real packed geometries.
 
-The strict δk_disc < σ criterion is not satisfied at n=8 or n=16:
+**Packed-particle study (pending)**
 
-- n=4→8: δk = 2.87×10⁻⁴ >> σ(8) ≈ 4×10⁻⁵ → fails by ~7×
-- n=8→16: δk = 1.56×10⁻⁴ >> σ(16) ≈ 4×10⁻⁵ → fails by ~4×
-- n=16→32: δk = 5.32×10⁻⁵ ≈ σ(32) ≈ 4×10⁻⁵ → nearly satisfied; best achievable without n=64
+Results from `scripts/run_convergence.py` with real packed beds are pending. The table below will be populated after the AWS Batch sweep completes:
 
-**Direction of bias:** The staircase underestimates cone volume, not particle count. Because `bed_region` is mass-conserving, particles that do not fit within the inscribed staircase cylinders overflow into the retort cylinder above the cone rather than disappearing. The cone is geometrically less favorable than the cylinder (narrower cross-section, closer to the graphite wall, higher neutron leakage). Redistributing particles from the cone to the cylinder therefore **overestimates** k-eff relative to the true geometry. This is confirmed by the data: k-eff decreases monotonically as n_slabs increases and the staircase more accurately captures the cone volume.
+| config | mean k-eff | across-seed σ | mean MC σ | pf achieved | pf requested | pf deviation | bias vs exact-cone |
+|--------|------------|---------------|-----------|-------------|--------------|--------------|-------------------|
+| exact_cone | — | — | — | — | 0.500 | — | reference |
+| n=32 | — | — | — | — | 0.500 | — | — |
+| n=16 | — | — | — | — | 0.500 | — | — |
+| n=8  | — | — | — | — | 0.500 | — | — |
 
-The k-eff bias is therefore not conservative for NCS in the usual sense — a lower bound on k-eff is not what a criticality safety case needs. n=32 is selected because the δk_disc criterion is nearly met (δk=5.3×10⁻⁵ ≈ σ) and the geometric accuracy is substantially better than n=8:
+*Background: full-flood water at 1.0 g/cm³. State: collapsed. Stage: bare_kernel. Charge: 95 g.*
 
-1. **n=8 is quantifiably insufficient at pf=0.50**: δk=1.56×10⁻⁴ is ~4× larger than σ; n=8 places 25.6% of the bulk volume in the wrong geometric region (mislocated particles distributed to the cylinder instead of the cone).
-
-2. **n=32 achieves near-convergence**: δk=5.32×10⁻⁵ approaches σ at n=32. The estimated n=32→64 bias is ~3×10⁻⁵ (geometric halving), which is negligible relative to the statistical uncertainty of production runs.
-
-3. **Geometric accuracy**: V_error drops from 16.4% at n=8 to 4.7% at n=32. The unrepresented cone volume at n=32 is V_frustum − V_staircase ≈ 28.3 − 27.0 = 1.3 cm³, mislocated by mass conservation. As a fraction of V_bulk: 1.3 / 18.10 ≈ 7.4% — a fourfold improvement over n=8.
-
-For the fluidized state (pf_fluidized = 0.333, ~1.5× lower than pf_static), the same geometric error produces a proportionally smaller k-eff perturbation, making n=32 conservative for fluidized-state runs.
+**Expected direction of bias**: The staircase mislocates particles from the cone (narrower, closer to graphite wall, higher leakage) to the retort cylinder above, overestimating k-eff. In the flooded case this effect is amplified — the cone is better moderated than the cylinder so displacing particles upward reduces moderation efficiency and raises leakage, pushing k-eff in the non-conservative direction.
 
 ## Design decisions
 
@@ -123,7 +115,7 @@ For the fluidized state (pf_fluidized = 0.333, ~1.5× lower than pf_static), the
 - Nozzle throat: graphite only; particles never enter it.
 - Fluidized bed occupies the cone (inscribed staircase at pf_fluidized) plus overflow into the retort cylinder above the cone top (uniform fluidization, not spouted-bed).
 - Background material is a caller-supplied parameter (not a params default).
-- Convergence criterion: δk_disc < 1σ of the finer run.
+- Convergence criterion: bias vs exact-cone reference < across-seed σ (packed-particle study, pending).
 
 ### Defaulted
 - **Throat height 30.0 mm**: no fabrication drawing available; a reasonable value for a ø6 mm orifice throat. Marked `# CONFIRM`.

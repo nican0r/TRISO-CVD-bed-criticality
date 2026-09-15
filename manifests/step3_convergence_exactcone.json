@@ -1,0 +1,7 @@
+[
+  {"state": "collapsed", "stage": "bare_kernel", "n_particles": 20000, "n_inactive": 50, "n_active": 250, "seed": 42, "use_exact_cone": true, "z_flood": 999.0},
+  {"state": "collapsed", "stage": "bare_kernel", "n_particles": 20000, "n_inactive": 50, "n_active": 250, "seed": 43, "use_exact_cone": true, "z_flood": 999.0},
+  {"state": "collapsed", "stage": "bare_kernel", "n_particles": 20000, "n_inactive": 50, "n_active": 250, "seed": 44, "use_exact_cone": true, "z_flood": 999.0},
+  {"state": "collapsed", "stage": "bare_kernel", "n_particles": 20000, "n_inactive": 50, "n_active": 250, "seed": 45, "use_exact_cone": true, "z_flood": 999.0},
+  {"state": "collapsed", "stage": "bare_kernel", "n_particles": 20000, "n_inactive": 50, "n_active": 250, "seed": 46, "use_exact_cone": true, "z_flood": 999.0}
+]

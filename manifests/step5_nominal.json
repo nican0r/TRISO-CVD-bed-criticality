@@ -1,0 +1,18 @@
+[
+  {
+    "state": "fluidized",
+    "stage": "bare_kernel",
+    "n_particles": 20000,
+    "n_inactive": 50,
+    "n_active": 250,
+    "seed": 42
+  },
+  {
+    "state": "collapsed",
+    "stage": "bare_kernel",
+    "n_particles": 20000,
+    "n_inactive": 50,
+    "n_active": 250,
+    "seed": 42
+  }
+]

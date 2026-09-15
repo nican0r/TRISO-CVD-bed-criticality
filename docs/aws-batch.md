@@ -29,7 +29,7 @@ manifest, then uploads the statepoint and a summary JSON to S3.
 local (Mac)                                 AWS
 ────────────                                ───
 scripts/batch/submit_sweep.py  ── upload ─▶ S3://…/manifests/<sweep>/<sha>.json
-                               ── submit ─▶ AWS Batch (EC2 Spot, c7i.2xlarge)
+                               ── submit ─▶ AWS Batch (EC2 On-Demand, c7i/c6i/m7i/m6i/m5.2xlarge)
                                               │
                                               ├─ pulls container from ECR
                                               ├─ mounts EFS /xs (nuclear data)
@@ -42,15 +42,20 @@ All AWS resources are created by **`aws/cloudformation.yaml`**. Everything
 lives in a single stack so you can tear it down with one command when the
 study is finished.
 
+> **Note:** The compute environment uses On-Demand instances (`EC2` /
+> `BEST_FIT_PROGRESSIVE`). Spot was trialled but dropped due to capacity
+> shortages in sa-east-1 and the risk of termination mid-run on long
+> large-mass step7a jobs.
+
 - **S3 bucket** `triso-cvd-ncs-<account>-<region>` — manifests, results,
   and the source copy of nuclear data. Lifecycle: results transition to
   Infrequent Access after 30 days and expire after 180 days.
 - **EFS filesystem** mounted read-only at `/xs` in every job. Hydrated once
   from S3 by a Fargate task.
 - **ECR repo** `triso-cvd-ncs` — the job container image.
-- **Batch compute environment** on EC2 **Spot** (`c7i.2xlarge` /
-  `c6i.2xlarge`, 8 vCPU / 16 GB), min 0 → max 256 vCPU (32 concurrent
-  8-vCPU jobs by default).
+- **Batch compute environment** on EC2 **On-Demand** (`c7i.2xlarge` /
+  `c6i.2xlarge` / `m7i.2xlarge` / `m6i.2xlarge` / `m5.2xlarge`, 8 vCPU /
+  16 GB), min 0 → max 256 vCPU (32 concurrent 8-vCPU jobs by default).
 - **Job queue** `triso-ncs-queue` and **job definition** `triso-ncs-job`.
 
 ---
@@ -273,8 +278,7 @@ current us-east-1 prices as of 2026 Q3.
 - Nominal case at production settings (20 k particles × 300 batches,
   6 M histories) is ~10–15 min on a c7i.2xlarge. Denser bed states and
   flooded configs raise collision rate; assume **20 min/job average**.
-- c7i.2xlarge Spot: ~$0.06/hr → **$0.02 per job**
-- c7i.2xlarge On-Demand: ~$0.11/hr → **$0.037 per job** (ceiling)
+- c7i.2xlarge On-Demand: ~$0.384/hr → **$0.13 per job**
 
 ### Job counts
 
@@ -289,8 +293,7 @@ current us-east-1 prices as of 2026 Q3.
 
 ### Compute cost
 
-- **Spot:** 146 × $0.02 ≈ **$3**
-- **On-Demand ceiling:** 146 × $0.037 ≈ **$5.50**
+- **On-Demand:** 146 × $0.13 ≈ **$19**
 
 ### Fixed / recurring
 
@@ -304,15 +307,14 @@ current us-east-1 prices as of 2026 Q3.
 
 ### Bottom line
 
-**Realistic total for the complete step 7 + 8 study: $5–10.**
+**Realistic total for the complete step 7 + 8 study: ~$20.**
 Worst case, if you doubled batch counts across all sweeps, you would
-still be under **$25**.
+still be under **$50**.
 
 Cost controls in place:
 - Compute environment `MinvCpus=0`: nothing runs when no job is queued.
-- Job definition `Attempts=2`: retries once on Spot reclamation, then
-  gives up rather than looping.
-- Job timeout 3 hours per attempt: a runaway won't burn a whole day.
+- Job definition `Attempts=3`: retries up to 3 times on failure.
+- Job timeout 24 hours per attempt: sufficient headroom for large-mass step7a packing.
 - `submit_sweep.py --dry-run`: preview a sweep before spending.
 - Stack tag `Project=triso-ncs` on every resource: enable this tag in
   Cost Explorer to see spend broken out.
@@ -348,11 +350,9 @@ tag is wrong or was never pushed. Rerun `./aws/build-and-push.sh`.
 hydration never ran or failed. Rerun `./aws/hydrate-nuclear-data.sh`
 and check the CloudWatch log group `/aws/ecs/triso-ncs-hydrator`.
 
-**Spot reclaim shows up as `FAILED` with a `Host EC2*` status reason.**
-Batch will already have retried once (per the job definition's retry
-strategy). If retries also fail, wait for Spot capacity to improve or
-temporarily set `SpotBidPercentage=100` and swap to On-Demand by
-switching the CE `Type` to `EC2`.
+**Job fails with `Host EC2 … terminated` status reason.**
+This was a Spot reclamation issue from a prior configuration. The compute
+environment now uses On-Demand (`EC2`) — this error should not recur.
 
 **`aws ecr get-login-password` fails.** Your local AWS profile expired
 (SSO). Refresh with `aws sso login` and retry.

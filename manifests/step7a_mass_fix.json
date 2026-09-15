@@ -1,0 +1,29 @@
+[
+  {
+    "state": "collapsed",
+    "stage": "bare_kernel",
+    "charge_mass_g": 142.5,
+    "n_particles": 20000,
+    "n_inactive": 50,
+    "n_active": 250,
+    "seed": 42
+  },
+  {
+    "state": "collapsed",
+    "stage": "bare_kernel",
+    "charge_mass_g": 190.0,
+    "n_particles": 20000,
+    "n_inactive": 50,
+    "n_active": 250,
+    "seed": 42
+  },
+  {
+    "state": "collapsed",
+    "stage": "bare_kernel",
+    "charge_mass_g": 285.0,
+    "n_particles": 20000,
+    "n_inactive": 50,
+    "n_active": 250,
+    "seed": 42
+  }
+]

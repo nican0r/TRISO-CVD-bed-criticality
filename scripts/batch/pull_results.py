@@ -43,10 +43,14 @@ def _latest_submission(bucket: str, sweep: str, region: str | None) -> str:
     return sorted(submissions)[-1]
 
 
-def _sync(bucket: str, sweep: str, submission: str, out_dir: Path) -> None:
+def _sync(bucket: str, sweep: str, submission: str, out_dir: Path,
+          summary_only: bool = False) -> None:
     src = f"s3://{bucket}/runs/{sweep}/{submission}/"
     out_dir.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["aws", "s3", "sync", src, str(out_dir)], check=True)
+    cmd = ["aws", "s3", "sync", src, str(out_dir)]
+    if summary_only:
+        cmd += ["--exclude", "*", "--include", "*/results.json"]
+    subprocess.run(cmd, check=True)
 
 
 def _aggregate(out_dir: Path) -> Path:
@@ -94,6 +98,8 @@ def main() -> int:
                     help="Submission ID; defaults to the newest one for this sweep.")
     ap.add_argument("--stack", default=DEFAULT_STACK)
     ap.add_argument("--region", default=None)
+    ap.add_argument("--summary-only", action="store_true",
+                    help="Only download results.json files (skip statepoints/summary.h5).")
     args = ap.parse_args()
 
     outs = _stack_outputs(args.stack, args.region)
@@ -103,7 +109,7 @@ def main() -> int:
     print(f"[pull] sweep={args.sweep}  submission={submission}")
 
     out_dir = _REPO_ROOT / "results" / args.sweep / submission
-    _sync(bucket, args.sweep, submission, out_dir)
+    _sync(bucket, args.sweep, submission, out_dir, summary_only=args.summary_only)
     csv_path = _aggregate(out_dir)
     print(f"[pull] wrote {csv_path}")
     return 0

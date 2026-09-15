@@ -21,7 +21,7 @@ from furnace.materials import (
     process_gas as _process_gas,
     water as _water,
 )
-from furnace.geometry import bed_region, furnace_shell_cells
+from furnace.geometry import bed_region, exact_cone_bed, furnace_shell_cells
 
 _OPENMC_EXEC = shutil.which('openmc') or str(Path(sys.executable).parent / 'openmc')
 
@@ -56,6 +56,8 @@ def build_model(
     n_particles: int | None = None,
     seed: int | None = None,
     charge_mass_g: float | None = None,
+    n_slabs: int | None = None,
+    use_exact_cone: bool = False,
 ) -> tuple[openmc.Model, BedStats]:
     """Assemble and return an openmc.Model for the CVD furnace NCS eigenvalue case.
 
@@ -74,6 +76,9 @@ def build_model(
     n_particles   : particles per batch; defaults to params['model']['particles']
     seed          : OpenMC seed AND packing seed (both change together for seed study)
     charge_mass_g : overrides params bed charge mass for mass sweeps
+    n_slabs       : staircase slab count; overrides params['model']['n_slabs'] when set
+    use_exact_cone: if True, use the rejection-sampled exact frustum geometry instead of
+                    the staircase approximation (validation-only; ignores n_slabs)
 
     Returns
     -------
@@ -100,17 +105,31 @@ def build_model(
     bed_fill = water_mat if z_flood is not None else gas_mat
 
     # ── Bed ──────────────────────────────────────────────────────────────────
-    bed = bed_region(
-        params,
-        state=state,
-        stage=stage,
-        n_slabs=int(mdl['n_slabs']),
-        background_material=bed_fill,
-        charge_mass_g=charge_mass_g,
-        seed=_seed,
-        z_flood=z_flood,
-        dry_material=gas_mat if z_flood is not None else None,
-    )
+    _n_slabs = int(n_slabs if n_slabs is not None else mdl['n_slabs'])
+
+    if use_exact_cone:
+        bed = exact_cone_bed(
+            params,
+            state=state,
+            stage=stage,
+            background_material=bed_fill,
+            charge_mass_g=charge_mass_g,
+            seed=_seed,
+            z_flood=z_flood,
+            dry_material=gas_mat if z_flood is not None else None,
+        )
+    else:
+        bed = bed_region(
+            params,
+            state=state,
+            stage=stage,
+            n_slabs=_n_slabs,
+            background_material=bed_fill,
+            charge_mass_g=charge_mass_g,
+            seed=_seed,
+            z_flood=z_flood,
+            dry_material=gas_mat if z_flood is not None else None,
+        )
 
     # ── Furnace shell ─────────────────────────────────────────────────────────
     shell = furnace_shell_cells(params, graphite=graph_mat, water=water_mat)
@@ -202,11 +221,14 @@ def build_model(
     #   900 K  — C12, C13 (nndc_hdf5 has only C0, no isotopic match; conservative)
     #   1200 K — c_Graphite S(α,β) (only temperature in endfb80_hdf5/thermal/)
     # 'default' = 900 K catches any nuclide below the library minimum.
-    # 'range' must include 293.6 K so OpenMC accepts the material temperature before snapping.
+    # 'range' is intentionally omitted: specifying it causes OpenMC to preload cross
+    # sections for every temperature in the range, which fails for C12 at 293.6 K
+    # before nearest-snapping can occur.  Without 'range', OpenMC applies nearest-
+    # snapping directly to each material's temperature (293.6 K → 900 K for C12).
     settings.temperature = {
-        'method':  'nearest',
-        'default': 900.0,
-        'range':   [250.0, 3000.0],
+        'method':    'nearest',
+        'tolerance': 2000,
+        'default':   900.0,
     }
     # UCO kernels occupy ~3.2% of the source Box volume (pf=0.333 × kernel fraction
     # 0.123 × π/4 box-to-cylinder ratio).  The default source_rejection_fraction=0.05

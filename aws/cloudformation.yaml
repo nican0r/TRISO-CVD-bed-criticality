@@ -341,17 +341,15 @@ Resources:
       ServiceRole: !GetAtt BatchServiceRole.Arn
       State: ENABLED
       ComputeResources:
-        Type: SPOT
-        AllocationStrategy: SPOT_CAPACITY_OPTIMIZED
-        BidPercentage: !Ref SpotBidPercentage
+        Type: EC2
+        AllocationStrategy: BEST_FIT_PROGRESSIVE
         MinvCpus: 0
         MaxvCpus: !Ref MaxvCpus
         DesiredvCpus: 0
-        InstanceTypes: [c7i.2xlarge, c6i.2xlarge, c5.2xlarge]
+        InstanceTypes: [c7i.2xlarge, c6i.2xlarge, c5.2xlarge, m7i.2xlarge, m6i.2xlarge, m5.2xlarge, c7i.4xlarge, c6i.4xlarge, m7i.4xlarge, m6i.4xlarge]
         Subnets: !Ref SubnetIds
         SecurityGroupIds: [!Ref EfsSecurityGroup]
         InstanceRole: !GetAtt BatchInstanceProfile.Arn
-        SpotIamFleetRole: !GetAtt SpotFleetRole.Arn
         Tags:
           Project: triso-ncs
 
