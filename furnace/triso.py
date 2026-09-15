@@ -330,6 +330,132 @@ def pack_bed(region, packing_fraction, outer_radius, fill_universe, seed, params
 
 
 # ---------------------------------------------------------------------------
+# Tiled repeating-unit-cell bed
+# ---------------------------------------------------------------------------
+
+def _tile_cache_key(tile_size_cm, packing_fraction, outer_radius, seed):
+    payload = json.dumps(
+        {'tile': round(tile_size_cm, 8),
+         'pf':   round(packing_fraction, 8),
+         'r':    round(outer_radius, 8),
+         'seed': int(seed)},
+        sort_keys=True,
+    )
+    return 'tile_' + hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
+def _pack_tile_centers(tile_size_cm, packing_fraction, outer_radius, seed):
+    """Pack one cubic tile once (cached); return centers array in the tile's local frame.
+
+    The tile is centred on the origin: centres lie in (-tile_size/2, +tile_size/2)
+    on every axis. Reused by every outer-lattice cell, so the pack runs at most
+    once per (tile_size, pf, r, seed).
+    """
+    key = _tile_cache_key(tile_size_cm, packing_fraction, outer_radius, seed)
+    cache_path = _CACHE_DIR / f"{key}.npz"
+    if cache_path.exists():
+        return np.load(cache_path)['centers']
+
+    half = tile_size_cm / 2.0
+    region = (
+        +openmc.XPlane(x0=-half) & -openmc.XPlane(x0=+half) &
+        +openmc.YPlane(y0=-half) & -openmc.YPlane(y0=+half) &
+        +openmc.ZPlane(z0=-half) & -openmc.ZPlane(z0=+half)
+    )
+    centers = np.asarray(openmc.model.pack_spheres(
+        radius=outer_radius, region=region, pf=packing_fraction, seed=int(seed),
+    ))
+    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    np.savez(cache_path, centers=centers)
+    return centers
+
+
+def tiled_bed(lower_left, upper_right, packing_fraction, outer_radius,
+              fill_universe, background_material, seed, params,
+              *, tile_size_cm=0.5):
+    """Build a repeating-tile RectLattice covering the [lower_left, upper_right] box.
+
+    A single cubic tile of edge *tile_size_cm* is packed once (cached) and wrapped
+    in a `Universe`. That universe is then placed in every cell of an outer
+    RectLattice sized to span the requested bounding box. Because every lattice
+    cell shares the *same* universe reference, the unique openmc.Cell count is
+    ~particles_per_tile — independent of bed volume. This is the fix for the
+    O(N_particles) memory scaling seen with `pack_bed` + `lattice_bed` at high
+    charge masses (see docs/steps/step-7-mass-packing-sweeps.md).
+
+    Trade-off: introduces quasi-periodicity at the tile scale. Validate against
+    a random-packed reference at low mass before relying on it (see
+    scripts/validate_tiled_bed.py).
+
+    Notes
+    -----
+    * `lower_left`/`upper_right` define the outer bounding box; lattice cells
+      that fall outside the calling cell's *region* are geometrically inert.
+    * The tile universe is centred on the origin; OpenMC translates it to each
+      lattice cell's centre when neutrons enter.
+    * `packing_fraction` is the tile-scale target; the actual bed-scale pf is
+      the same up to the tile packer's residual.
+
+    Returns
+    -------
+    (lattice, tile_pf_achieved, n_per_tile) — the RectLattice ready to use as a
+    cell fill, the tile's achieved packing fraction, and the number of particles
+    per tile. Callers compute region-level particle counts as
+    ``tile_pf_achieved * region_volume / (4/3 π r³)``.
+    """
+    centers_local = _pack_tile_centers(tile_size_cm, packing_fraction, outer_radius, seed)
+    n_per_tile = int(len(centers_local))
+    v_particle = _shell_vol(outer_radius)
+    tile_pf_achieved = n_per_tile * v_particle / (tile_size_cm ** 3)
+
+    # Build TRISO cells at local (tile-frame) coordinates.
+    trisos_local = [
+        openmc.model.TRISO(outer_radius, fill_universe, tuple(c))
+        for c in centers_local
+    ]
+
+    # Nested lattice inside the tile so intra-tile neutron tracking stays fast.
+    # Pitch: same rule as lattice_bed (max(4r, 0.20 cm)) capped so shape ≥ 1.
+    inner_pitch_target = max(4.0 * outer_radius, 0.20)
+    inner_shape = tuple(
+        max(1, int(math.ceil(tile_size_cm / inner_pitch_target)))
+        for _ in range(3)
+    )
+    inner_pitch = tuple(tile_size_cm / n for n in inner_shape)
+    inner_lat = openmc.model.create_triso_lattice(
+        trisos_local,
+        lower_left=(-tile_size_cm / 2.0,) * 3,
+        pitch=inner_pitch,
+        shape=inner_shape,
+        background=background_material,
+    )
+    tile_cell = openmc.Cell(fill=inner_lat)
+    tile_universe = openmc.Universe(cells=[tile_cell])
+
+    # Outer lattice: broadcast the same tile universe across the bounding box.
+    ll = np.asarray(lower_left, dtype=float)
+    ur = np.asarray(upper_right, dtype=float)
+    span = ur - ll
+    nx = max(1, int(math.ceil(span[0] / tile_size_cm)))
+    ny = max(1, int(math.ceil(span[1] / tile_size_cm)))
+    nz = max(1, int(math.ceil(span[2] / tile_size_cm)))
+
+    outer_bg_cell = openmc.Cell(fill=background_material)
+    outer_bg_universe = openmc.Universe(cells=[outer_bg_cell])
+
+    outer_lat = openmc.RectLattice()
+    outer_lat.lower_left = tuple(ll)
+    outer_lat.pitch = (tile_size_cm, tile_size_cm, tile_size_cm)
+    outer_lat.outer = outer_bg_universe
+    # Shape ordering for RectLattice.universes is [z][y][x]. Every cell holds the
+    # same universe *object* — the whole point of tiling — so RAM is O(1) in
+    # lattice size.
+    outer_lat.universes = [[[tile_universe] * nx for _ in range(ny)] for _ in range(nz)]
+
+    return outer_lat, tile_pf_achieved, n_per_tile
+
+
+# ---------------------------------------------------------------------------
 # Lattice wrapper
 # ---------------------------------------------------------------------------
 

@@ -131,3 +131,40 @@ The 0.60 → 0.50 change closes a ~13× per-particle runtime gap. Multiplied by 
 - δk_disc for n_slabs=32 is 0.0 in the CSV (no n=64 baseline); `_load_dk_disc(32)` returns 0.0. Estimated missing bias ~3×10⁻⁵ (geometric halving of δk=5.32×10⁻⁵ from n=16→32 at pf=0.50), negligible vs σ. Applied conservatively as 0 in reported k+2σ+δk_disc. This is a Stage 0 approximation.
 - Structural graphite density 1.75 g/cm³ with zero boron equivalent — see preamble.
 - All ambient temperature approximations (900 K instead of 293.6 K, 1200 K for `c_Graphite` S(α,β)) — inherited library limitation, non-conservative but small for this subcritical regime.
+
+---
+
+## Tiled repeating-unit-cell bed (memory fix for high-mass cases)
+
+**Symptom.** AWS Batch OOM at 10×–38× mass despite two instance-memory bumps. Linear extrapolation from a local 95 g profile predicted ~21 GB of `pack_bed`-stage RSS at 38× — no reasonable instance size fixes that.
+
+**Root cause.** `openmc.model.TRISO(...)` returns a `Cell` with a `Sphere` region per particle. `pack_bed` + `create_triso_lattice` therefore materialise **O(N_particles)** unique `Cell` objects — ~2.6 KB each in this model. At 95 g nominal this is already 565 MB of `Cell` overhead; at 38× (~8.7 M particles) it is ~21 GB. The lattice / XML layers are trivial by comparison (~7 MB at 95 g, ~85× less than the packing layer). Measured via `scripts/profile_memory.py`.
+
+**Fix — tiled repeating-unit-cell bed** (`furnace/triso.py:tiled_bed`). Pack one small cube (default 0.5 cm edge, ~1500 bare-kernel particles at pf 0.50) *once*, wrap it as an `openmc.Universe`, and place that **same universe reference** in every cell of an outer `openmc.RectLattice` sized to cover the bed region. Because every outer-lattice cell shares the tile universe, the unique `Cell` count is O(particles per tile), not O(particles in bed) — memory becomes independent of charge mass.
+
+Wired behind a keyword flag: `build_model(..., use_tiled_bed=True, tile_size_cm=0.5)`. Default `False`, so steps 3–6 remain byte-identical. Both `bed_region` (staircase) and `exact_cone_bed` accept the flag.
+
+**Measured at 95 g nominal** (`use_tiled_bed=True` vs `False`):
+
+| metric | random pack | tiled | ratio |
+|---|---|---|---|
+| N particles in bed | 216 990 | 224 956 | ×1.04 (packing variance) |
+| Achieved pf | 0.4990 | 0.4997 | — |
+| Unique `openmc.Cell` count | 326 493 | 70 343 | 0.22× |
+| ΔRSS during build | 565 MB | 29 MB | **0.05×** |
+
+At 38× mass, the tiled build RSS stays flat at ~30 MB (scales with particles-per-tile, not bed volume). This is the memory headroom the sweep needs.
+
+**Trade-off.** The tile universe is repeated across the bed, so the particle placement is quasi-periodic at 0.5 cm rather than fully random. Thermal diffusion length in this bed is several cm, so the artifact on k-eff is expected to be small — but must be validated, not assumed.
+
+**Validation.** `scripts/validate_tiled_bed.py` runs matched-seed k-eff at a given charge mass in both modes and compares:
+
+```
+python3 scripts/validate_tiled_bed.py                          # 95 g, quick stats
+python3 scripts/validate_tiled_bed.py --mass 190 \             # 2× nominal, tighter
+    --particles 20000 --inactive 50 --active 200
+```
+
+Rule: accept the tiled path if `|Δk| < 3·σ(Δk)` at the operating statistics (few × 10⁻³). If not, either shrink `tile_size_cm` (fewer particles per periodicity length) or re-seed the tile per slab.
+
+**Follow-on optimisation not done here.** The current `tiled_bed` builds a fresh tile universe on every slab call, so total unique cells scale as N_slabs × particles_per_tile (~15 slabs × 1500 = 22.5k at 95 g; growing with mass as more slabs are populated). Sharing a single tile universe across all slabs would give a further ~O(N_slabs) reduction at high mass; it was deferred because the current implementation already fits comfortably in memory at 38×, and slab-independent tiles keep the axial pack quasi-random rather than strictly periodic through the full bed height.
