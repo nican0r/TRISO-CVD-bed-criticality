@@ -33,7 +33,8 @@ if str(_REPO_ROOT) not in sys.path:
 
 
 def _child(mass_g: float, mode: str, tile_size_cm: float,
-           n_particles: int, n_inactive: int, n_active: int, seed: int) -> dict:
+           n_particles: int, n_inactive: int, n_active: int, seed: int,
+           use_exact_cone: bool = False) -> dict:
     import psutil
     p = psutil.Process()
 
@@ -56,12 +57,14 @@ def _child(mass_g: float, mode: str, tile_size_cm: float,
         seed=seed,
         use_tiled_bed=use_tiled,
         tile_size_cm=tile_size_cm,
+        use_exact_cone=use_exact_cone,
     )
     gc.collect()
     rss_build = p.memory_info().rss / (1024 ** 2)
     n_cells = len(model.geometry.get_all_cells())
 
-    out_dir = _REPO_ROOT / 'results' / 'validate_tiled_bed' / f'{mode}_{int(mass_g)}g'
+    geom_tag = 'exactcone' if use_exact_cone else 'staircase'
+    out_dir = _REPO_ROOT / 'results' / 'validate_tiled_bed' / f'{geom_tag}_{mode}_{int(mass_g)}g'
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Reuse a completed statepoint if present (avoids re-running the 20-min transport
@@ -100,7 +103,8 @@ def _child(mass_g: float, mode: str, tile_size_cm: float,
 
 def _child_main(args) -> None:
     result = _child(args.mass, args.mode, args.tile_size,
-                    args.particles, args.inactive, args.active, args.seed)
+                    args.particles, args.inactive, args.active, args.seed,
+                    use_exact_cone=args.exact_cone)
     print('__RESULT__' + json.dumps(result))
 
 
@@ -110,17 +114,17 @@ def _parent_main(args) -> None:
         print(f'\n── running {mode} at {args.mass:g} g '
               f'({args.particles} p/gen, {args.inactive} inactive + {args.active} active) ──',
               flush=True)
-        proc = subprocess.run(
-            [sys.executable, str(Path(__file__).resolve()),
-             '--child', '--mode', mode,
-             '--mass', str(args.mass),
-             '--tile-size', str(args.tile_size),
-             '--particles', str(args.particles),
-             '--inactive', str(args.inactive),
-             '--active', str(args.active),
-             '--seed', str(args.seed)],
-            capture_output=True, text=True,
-        )
+        child_argv = [sys.executable, str(Path(__file__).resolve()),
+                      '--child', '--mode', mode,
+                      '--mass', str(args.mass),
+                      '--tile-size', str(args.tile_size),
+                      '--particles', str(args.particles),
+                      '--inactive', str(args.inactive),
+                      '--active', str(args.active),
+                      '--seed', str(args.seed)]
+        if args.exact_cone:
+            child_argv.append('--exact-cone')
+        proc = subprocess.run(child_argv, capture_output=True, text=True)
         if proc.returncode != 0:
             print(f'  FAILED (rc={proc.returncode})')
             print('  stderr tail:', proc.stderr[-2000:])
@@ -140,8 +144,9 @@ def _parent_main(args) -> None:
     sig_diff = (r_rand['sigma'] ** 2 + r_tile['sigma'] ** 2) ** 0.5
     z = dk / sig_diff if sig_diff > 0 else float('inf')
 
+    geom_label = 'exact-cone' if args.exact_cone else 'staircase'
     print('\n' + '=' * 78)
-    print(f"  Validation: tiled vs random bed at charge_mass = {args.mass:g} g")
+    print(f"  Validation: tiled vs random {geom_label} bed at charge_mass = {args.mass:g} g")
     print('=' * 78)
     print(f"{'':>18} {'random':>18} {'tiled':>18}")
     for key, fmt in [
@@ -179,6 +184,8 @@ def main() -> None:
     ap.add_argument('--active', type=int, default=100,
                     help='active batches (default 100)')
     ap.add_argument('--seed', type=int, default=42, help='OpenMC seed (default 42)')
+    ap.add_argument('--exact-cone', action='store_true',
+                    help='validate the exact-cone reference geometry instead of the staircase')
     ap.add_argument('--child', action='store_true', help=argparse.SUPPRESS)
     ap.add_argument('--mode', choices=('random', 'tiled'), help=argparse.SUPPRESS)
     args = ap.parse_args()

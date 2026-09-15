@@ -605,10 +605,15 @@ def exact_cone_bed(params, state: str, stage: str, background_material,
     frustum_region = -cone_surf & +zp_cone_bot & -zp_cone_top_plane
 
     if use_tiled_bed:
+        # Scale tile density so the total particle count across the frustum matches
+        # target_n; otherwise the tile would fill the whole frustum at pf regardless
+        # of charge mass and over-produce when V_bulk < v_frustum. When the charge
+        # exceeds the frustum, cap at pf and let the overflow block handle the rest.
+        pf_tile_frustum = min(pf, target_n * v_sphere / v_frustum)
         lattice, tile_pf_ach, _ = tiled_bed(
             lower_left=(-r_retort, -r_retort, 0.0),
             upper_right=(r_retort, r_retort, z_cone_top),
-            packing_fraction=pf,
+            packing_fraction=pf_tile_frustum,
             outer_radius=outer_r,
             fill_universe=fill_univ,
             background_material=bed_fill,
