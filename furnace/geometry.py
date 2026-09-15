@@ -21,6 +21,7 @@ from furnace.triso import (
     particle_at_stage,
     pack_bed,
     lattice_bed,
+    tiled_bed,
     _stage_outer_radius,
     _shell_vol,
     particle_mass_g,
@@ -161,7 +162,7 @@ def _flood_fill(z_bot, wet, dry, z_flood):
 # Bed region assembly
 # ---------------------------------------------------------------------------
 
-def bed_region(params, state, stage, n_slabs, background_material, charge_mass_g=None, seed=None, z_flood=None, dry_material=None):
+def bed_region(params, state, stage, n_slabs, background_material, charge_mass_g=None, seed=None, z_flood=None, dry_material=None, *, use_tiled_bed=False, tile_size_cm=0.5):
     """Assemble the particle bed for the given state and deposition stage.
 
     Parameters
@@ -292,17 +293,33 @@ def bed_region(params, state, stage, n_slabs, background_material, charge_mass_g
         slab_fill = _flood_fill(z_bot, background_material, dry_material, z_flood)
         region = -cyl & +zp_bot_s & -zp_top_s
         seed = base_seed + slab_index
-        trisos = pack_bed(region, pf, outer_r, fill_univ, seed, params)
-        lattice = lattice_bed(
-            trisos,
-            lower_left=(-r_slab, -r_slab, z_bot),
-            upper_right=(r_slab, r_slab, z_fill_top),
-            background_material=slab_fill,
-            pitch_target=pitch_target,
-        )
-        all_cells.append(openmc.Cell(fill=lattice, region=region))
-        all_trisos.extend(trisos)
-        total_particles += len(trisos)
+        if use_tiled_bed:
+            lattice, tile_pf_ach, _n_per_tile = tiled_bed(
+                lower_left=(-r_slab, -r_slab, z_bot),
+                upper_right=(r_slab, r_slab, z_fill_top),
+                packing_fraction=pf,
+                outer_radius=outer_r,
+                fill_universe=fill_univ,
+                background_material=slab_fill,
+                seed=seed,
+                params=params,
+                tile_size_cm=tile_size_cm,
+            )
+            all_cells.append(openmc.Cell(fill=lattice, region=region))
+            v_slab_cyl = math.pi * r_slab ** 2 * (z_fill_top - z_bot)
+            total_particles += int(round(tile_pf_ach * v_slab_cyl / _shell_vol(outer_r)))
+        else:
+            trisos = pack_bed(region, pf, outer_r, fill_univ, seed, params)
+            lattice = lattice_bed(
+                trisos,
+                lower_left=(-r_slab, -r_slab, z_bot),
+                upper_right=(r_slab, r_slab, z_fill_top),
+                background_material=slab_fill,
+                pitch_target=pitch_target,
+            )
+            all_cells.append(openmc.Cell(fill=lattice, region=region))
+            all_trisos.extend(trisos)
+            total_particles += len(trisos)
 
         # Annular void: inside cone, outside inscribed cylinder, at this slab height.
         # At z_bot the inscribed radius equals the cone radius (inscribed fit), so the
@@ -371,23 +388,42 @@ def bed_region(params, state, stage, n_slabs, background_material, charge_mass_g
 
             ov_fill = _flood_fill(z_ov_bot, background_material, dry_material, z_flood)
             seed = base_seed + slab_index
-            trisos_ov = pack_bed(region_ov, pf, outer_r, fill_univ, seed, params)
-            lattice_ov = lattice_bed(
-                trisos_ov,
-                lower_left=(-r_retort, -r_retort, z_ov_bot),
-                upper_right=(r_retort, r_retort, z_ov_top),
-                background_material=ov_fill,
-                pitch_target=pitch_target,
-            )
-            all_cells.append(openmc.Cell(fill=lattice_ov, region=region_ov))
-            all_trisos.extend(trisos_ov)
-            total_particles += len(trisos_ov)
+            if use_tiled_bed:
+                lattice_ov, tile_pf_ach, _n_per_tile = tiled_bed(
+                    lower_left=(-r_retort, -r_retort, z_ov_bot),
+                    upper_right=(r_retort, r_retort, z_ov_top),
+                    packing_fraction=pf,
+                    outer_radius=outer_r,
+                    fill_universe=fill_univ,
+                    background_material=ov_fill,
+                    seed=seed,
+                    params=params,
+                    tile_size_cm=tile_size_cm,
+                )
+                all_cells.append(openmc.Cell(fill=lattice_ov, region=region_ov))
+                v_ov_cyl = math.pi * r_retort ** 2 * (z_ov_top - z_ov_bot)
+                total_particles += int(round(tile_pf_ach * v_ov_cyl / _shell_vol(outer_r)))
+            else:
+                trisos_ov = pack_bed(region_ov, pf, outer_r, fill_univ, seed, params)
+                lattice_ov = lattice_bed(
+                    trisos_ov,
+                    lower_left=(-r_retort, -r_retort, z_ov_bot),
+                    upper_right=(r_retort, r_retort, z_ov_top),
+                    background_material=ov_fill,
+                    pitch_target=pitch_target,
+                )
+                all_cells.append(openmc.Cell(fill=lattice_ov, region=region_ov))
+                all_trisos.extend(trisos_ov)
+                total_particles += len(trisos_ov)
 
             bed_height_cm = z_ov_top
     else:
         bed_height_cm = z_last_fill_top
 
-    n_actual = len(all_trisos)
+    # In tiled mode `all_trisos` is intentionally empty (unique cells live in the
+    # single tile universe); fall back to `total_particles`, which the tiled path
+    # populates analytically from the tile pf × region volume.
+    n_actual = len(all_trisos) if all_trisos else total_particles
     V_actual_solid = n_actual * _shell_vol(outer_r)
     pf_achieved = V_actual_solid / V_bulk
 
@@ -450,7 +486,8 @@ def _cone_acceptance_mask(centers: np.ndarray, outer_radius: float,
 
 def exact_cone_bed(params, state: str, stage: str, background_material,
                    charge_mass_g: float | None = None, seed: int | None = None,
-                   z_flood: float | None = None, dry_material=None) -> dict:
+                   z_flood: float | None = None, dry_material=None,
+                   *, use_tiled_bed: bool = False, tile_size_cm: float = 0.5) -> dict:
     """Pack the true frustum by rejection sampling — validation-only reference geometry.
 
     Does not use the staircase approximation.  Sphere centres are placed in the
@@ -567,19 +604,37 @@ def exact_cone_bed(params, state: str, stage: str, background_material,
     bed_fill = _flood_fill(0.0, background_material, dry_material, z_flood)
     frustum_region = -cone_surf & +zp_cone_bot & -zp_cone_top_plane
 
-    trisos = [openmc.model.TRISO(outer_r, fill_univ, tuple(c.tolist())) for c in accepted]
-    lattice = lattice_bed(
-        trisos,
-        lower_left=(-r_retort, -r_retort, 0.0),
-        upper_right=(r_retort, r_retort, z_cone_top),
-        background_material=bed_fill,
-        pitch_target=pitch_target,
-    )
-    frustum_cell = openmc.Cell(fill=lattice, region=frustum_region)
+    if use_tiled_bed:
+        lattice, tile_pf_ach, _ = tiled_bed(
+            lower_left=(-r_retort, -r_retort, 0.0),
+            upper_right=(r_retort, r_retort, z_cone_top),
+            packing_fraction=pf,
+            outer_radius=outer_r,
+            fill_universe=fill_univ,
+            background_material=bed_fill,
+            seed=base_seed,
+            params=params,
+            tile_size_cm=tile_size_cm,
+        )
+        frustum_cell = openmc.Cell(fill=lattice, region=frustum_region)
+        trisos = []  # unique cells live in the tile universe, not per-particle
+        n_actual = int(round(tile_pf_ach * v_frustum / v_sphere))
+        V_actual_solid = n_actual * v_sphere
+        pf_achieved = V_actual_solid / V_bulk
+    else:
+        trisos = [openmc.model.TRISO(outer_r, fill_univ, tuple(c.tolist())) for c in accepted]
+        lattice = lattice_bed(
+            trisos,
+            lower_left=(-r_retort, -r_retort, 0.0),
+            upper_right=(r_retort, r_retort, z_cone_top),
+            background_material=bed_fill,
+            pitch_target=pitch_target,
+        )
+        frustum_cell = openmc.Cell(fill=lattice, region=frustum_region)
 
-    n_actual = len(trisos)
-    V_actual_solid = n_actual * v_sphere
-    pf_achieved = V_actual_solid / V_bulk
+        n_actual = len(trisos)
+        V_actual_solid = n_actual * v_sphere
+        pf_achieved = V_actual_solid / V_bulk
 
     # Overflow into retort cylinder if charge exceeds cone volume
     overflow_cells: list[openmc.Cell] = []
@@ -597,20 +652,40 @@ def exact_cone_bed(params, state: str, stage: str, background_material,
         zp_ov_top = openmc.ZPlane(z0=z_ov_top)
         region_ov = -cyl_ret & +zp_ov_bot & -zp_ov_top
         ov_fill = _flood_fill(z_ov_bot, background_material, dry_material, z_flood)
-        trisos_ov = pack_bed(region_ov, pf, outer_r, fill_univ, base_seed + 9000, params)
-        lattice_ov = lattice_bed(
-            trisos_ov,
-            lower_left=(-r_retort, -r_retort, z_ov_bot),
-            upper_right=(r_retort, r_retort, z_ov_top),
-            background_material=ov_fill,
-            pitch_target=pitch_target,
-        )
-        overflow_cells.append(openmc.Cell(fill=lattice_ov, region=region_ov))
-        extra_trisos.extend(trisos_ov)
+        if use_tiled_bed:
+            lattice_ov, tile_pf_ach, _ = tiled_bed(
+                lower_left=(-r_retort, -r_retort, z_ov_bot),
+                upper_right=(r_retort, r_retort, z_ov_top),
+                packing_fraction=pf,
+                outer_radius=outer_r,
+                fill_universe=fill_univ,
+                background_material=ov_fill,
+                seed=base_seed + 9000,
+                params=params,
+                tile_size_cm=tile_size_cm,
+            )
+            overflow_cells.append(openmc.Cell(fill=lattice_ov, region=region_ov))
+            v_ov_cyl = math.pi * r_retort ** 2 * h_overflow
+            n_extra_est = int(round(tile_pf_ach * v_ov_cyl / v_sphere))
+            # Represent the tile-mode count in n_total via a placeholder list length.
+            extra_trisos.extend([None] * n_extra_est)
+        else:
+            trisos_ov = pack_bed(region_ov, pf, outer_r, fill_univ, base_seed + 9000, params)
+            lattice_ov = lattice_bed(
+                trisos_ov,
+                lower_left=(-r_retort, -r_retort, z_ov_bot),
+                upper_right=(r_retort, r_retort, z_ov_top),
+                background_material=ov_fill,
+                pitch_target=pitch_target,
+            )
+            overflow_cells.append(openmc.Cell(fill=lattice_ov, region=region_ov))
+            extra_trisos.extend(trisos_ov)
         bed_height_cm = z_ov_top
 
-    all_trisos = trisos + extra_trisos
-    n_total = len(all_trisos)
+    # In tiled mode `trisos` is empty and `extra_trisos` holds None placeholders;
+    # combine into `all_trisos` for the 'trisos' export (which no caller consumes).
+    all_trisos = trisos + [t for t in extra_trisos if t is not None]
+    n_total = n_actual + len(extra_trisos)
     pf_achieved = (n_total * v_sphere) / V_bulk
 
     return {

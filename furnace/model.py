@@ -58,6 +58,8 @@ def build_model(
     charge_mass_g: float | None = None,
     n_slabs: int | None = None,
     use_exact_cone: bool = False,
+    use_tiled_bed: bool = False,
+    tile_size_cm: float = 0.5,
 ) -> tuple[openmc.Model, BedStats]:
     """Assemble and return an openmc.Model for the CVD furnace NCS eigenvalue case.
 
@@ -117,6 +119,8 @@ def build_model(
             seed=_seed,
             z_flood=z_flood,
             dry_material=gas_mat if z_flood is not None else None,
+            use_tiled_bed=use_tiled_bed,
+            tile_size_cm=tile_size_cm,
         )
     else:
         bed = bed_region(
@@ -129,6 +133,8 @@ def build_model(
             seed=_seed,
             z_flood=z_flood,
             dry_material=gas_mat if z_flood is not None else None,
+            use_tiled_bed=use_tiled_bed,
+            tile_size_cm=tile_size_cm,
         )
 
     # ── Furnace shell ─────────────────────────────────────────────────────────
