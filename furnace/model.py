@@ -192,12 +192,13 @@ def build_model(
     materials = openmc.Materials(all_mats)
 
     # ── Settings ──────────────────────────────────────────────────────────────
-    # Shannon entropy mesh: 10×10×20 spanning cone base (z=0) to retort top.
-    # Lateral cells 0.5×0.5 cm.  Cells inside the cone but outside the particle
-    # region will be empty and contribute zero entropy — harmless.
+    # Shannon entropy mesh spans the packed bed only (z_bed_bot → z_bed_top).
+    # Fissions are confined to the bed, so bins outside it always score zero
+    # and just waste resolution; tracking the bed bounding box gives ~2× axial
+    # resolution for the collapsed case (bed ≈ 9.6 cm vs retort ≈ 20 cm).
     entropy_mesh = openmc.RegularMesh()
-    entropy_mesh.lower_left  = (-r_ret_in, -r_ret_in, 0.0)
-    entropy_mesh.upper_right = ( r_ret_in,  r_ret_in, z_rt)
+    entropy_mesh.lower_left  = (-r_ret_in, -r_ret_in, z_bed_bot)
+    entropy_mesh.upper_right = ( r_ret_in,  r_ret_in, z_bed_top_val)
     entropy_mesh.dimension   = [10, 10, 20]
 
     # Watt source box spans the full bed (cone base z=0 to bed top).

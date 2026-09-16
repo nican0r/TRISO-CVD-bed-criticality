@@ -52,12 +52,12 @@ Results are written to `results/step5_nominal/` (fluidized) and `results/step5_c
 
 `build_model()` calls `bed_region()` for the TRISO bed (fluidized or collapsed depending on `state`), `furnace_shell_cells()` for the retort walls, heater, and injector, then adds a single cell of process gas filling the retort interior above the bed. The three regions are combined into a single root universe. A 10×10×20 Shannon entropy mesh over the full retort cylinder tracks source convergence each generation. The three tallies (flux spectrum, reaction rates, U-235 fission spatial) are scored over the bed region.
 
-The two nominal runs use identical materials, charge, and settings — they differ only in `state`:
+The two nominal runs use identical materials, charge, and settings — they differ only in `state`, and (under the state-dependent bed-top geometry adopted 2026-09-16) in the resulting bed height:
 
-- **Fluidized** (`run_nominal.py`) — bed occupies the cone (at `pf_fluidized = 0.333`); at the nominal 95 g bare-kernel charge the fluidized bulk volume ≈ 27.2 cm³ fills the full cone staircase with negligible overflow (~0.2 cm³), representing the operating condition.
-- **Collapsed** (`run_collapsed.py`) — bed occupies only the cone (at `pf_static`); denser, shorter geometry representing the settled state when fluidization stops.
+- **Fluidized** (`run_nominal.py`) — bed packed at `pf_fluidized = 0.333` in the cone up to `z_bed_top ≈ 3.75 cm` (V_bulk ≈ 27.14 cm³, ~96 % of V_frustum). Represents the operating condition.
+- **Collapsed** (`run_collapsed.py`) — bed packed at `pf_static = 0.500` in the cone up to `z_bed_top ≈ 3.21 cm` (V_bulk ≈ 18.10 cm³, ~64 % of V_frustum). Denser, shorter geometry representing the settled state when fluidization stops. The upper ~36 % of the cone is empty gas.
 
-Together the two bracket the range of k-eff between operating and settled bed configurations at the nominal charge.
+Together the two bracket the range of k-eff between operating and settled bed configurations at the nominal charge. **Historical note (superseded):** an earlier iteration of the exact-cone tiled path clamped the tile packing fraction to `target_n · v_sphere / v_frustum`, which made the two states share identical geometry whenever `V_bulk < V_frustum`. Under that build both `run_nominal` and `run_collapsed` returned the same k-eff (only `pf_achieved` reported in metadata differed). The current implementation truncates the bed cell at `z_bed_top` and packs at the state's actual pf, so the two states differ in bed height and produce distinct k-eff. See step 3 "Design decisions" §"State-dependent bed top".
 
 ## Experimental design
 
@@ -69,7 +69,7 @@ Together the two bracket the range of k-eff between operating and settled bed co
 
 **Driving condition:** Eigenvalue (k-eff) calculation. No external neutron source; fission neutrons drive subsequent generations.
 
-**Shannon entropy mesh:** 10×10×20 regular mesh spanning cone base (z=0) to retort top. Lateral cells 0.5×0.5 cm. Mesh cells that fall inside the cone but outside the inscribed staircase cylinders are empty and contribute zero entropy — this is harmless. At 20,000 particles per generation with pf_fluidized = 0.333, the fluidized bed fills essentially the full cone staircase with negligible overflow (~0.2 cm³); the entropy signal covers the cone interior at the nominal 95 g charge.
+**Shannon entropy mesh:** 10×10×20 regular mesh spanning the packed bed only — `(x, y, z) ∈ ([-r_ret_in, r_ret_in], [-r_ret_in, r_ret_in], [z_bed_bot, z_bed_top])`. Lateral cells 0.5×0.5 cm. Under the state-dependent bed-top geometry `z_bed_top` differs between states (≈ 3.21 cm collapsed vs ≈ 3.75 cm fluidized at 95 g), so the mesh follows the bed rather than the full retort. Bins outside the truncated frustum score zero and are harmless. Tightening the range to the bed bounding box (instead of `[0, z_rt]`) gives ~2× axial resolution for the collapsed case and matches the source Box extent.
 
 **Per-step settings (nominal production run):**
 - 50 inactive batches / 250 active batches / 20,000 particles per generation
@@ -93,7 +93,7 @@ openmc.run()           1 call
 
 ## Design decisions
 
-- **`fluidized_height` raised from 180 mm to 250 mm** — The placeholder value of 180 mm was a `# CONFIRM` estimate. At pf_fluidized = 0.333 and the nominal 95 g bare-kernel charge, V_bulk_fluidized = 95 / 10.5 / 0.333 = 27.17 cm³, which slightly exceeds the n=32 staircase cone (26.95 cm³) by ~0.22 cm³ — a negligible overflow. For the full TRISO stage at pf_fluidized = 0.333, ρ_eff ≈ 2.94 g/cm³ gives V_bulk = 95 / 2.94 / 0.333 = 97.0 cm³ with ~70.1 cm³ overflow (h_overflow ≈ 3.6 cm), comfortably within the 25 cm fluidized_height parameter. This remains `# CONFIRM` until verified against the actual process specification for maximum fluidization zone height.
+- **`fluidized_height` raised from 180 mm to 250 mm** — The placeholder value of 180 mm was a `# CONFIRM` estimate. At pf_fluidized = 0.333 and the nominal 95 g bare-kernel charge, V_bulk_fluidized = 95 / 10.5 / 0.333 = 27.14 cm³, which fits inside the true frustum (V_frustum ≈ 28.29 cm³) with the bed top at z ≈ 3.75 cm — no overflow at the bare-kernel stage. For the full TRISO stage at pf_fluidized = 0.333, ρ_eff ≈ 2.94 g/cm³ gives V_bulk ≈ 97.0 cm³, well above V_frustum, so ~68.7 cm³ overflows into the retort cylinder (h_overflow ≈ 3.5 cm), comfortably within the 25 cm fluidized_height parameter. This remains `# CONFIRM` until verified against the actual process specification for maximum fluidization zone height.
 
   Note: `fluidized_height_cm` bounds only the cylinder overflow above the cone, not the total bed height. The cone is always available to the bed regardless of this parameter.
 
@@ -115,7 +115,7 @@ openmc.run()           1 call
 
 - **Smoke test uses 10 000 particles** — The Watt source spectrum (peak ~1 MeV) has only ~0.2% fission probability per source particle in a sub-centimetre UCO kernel. With the smoke test's 1.15 cm bed, k-eff ≈ 0.0004 (99.98% leakage), so source particles rarely cause secondary fissions. 10 000 particles gives ~20 expected fission events per generation, reliably populating the fission bank. The smoke test confirmed k-eff = 0.0004 ± (not computed, 1 active batch) for the 5 g case.
 
-- **Two bed-state cases (fluidized + collapsed)** — The step brackets the operating and settled bed geometries at the same nominal charge. The fluidized case is the operating condition; the collapsed case represents what happens when fluidization stops and the bed settles into the cone at pf_static (denser, shorter). Comparing k-eff between the two shows the sensitivity of the nominal condition to bed state without changing any material or charge.
+- **Two bed-state cases (fluidized + collapsed)** — The step brackets the operating and settled bed geometries at the same nominal charge. The fluidized case is the operating condition; the collapsed case represents what happens when fluidization stops and the bed settles into the cone at pf_static (denser, shorter — bed top at z ≈ 3.21 cm vs ≈ 3.75 cm fluidized at 95 g). Comparing k-eff between the two shows the sensitivity of the nominal condition to bed state without changing any material or charge. Preliminary smoke-test transport (2 k particles × 3 active batches, seed 42) gives Δk = k(collapsed) − k(fluidized) ≈ +4.4 × 10⁻³ — collapsed is higher, consistent with less leakage from the more compact configuration in this undermoderated (process-gas) regime. Full-precision production numbers will replace this estimate once step 5 is rerun under the new geometry.
 
 ## Assumptions
 
@@ -136,7 +136,7 @@ openmc.run()           1 call
 - Entropy mesh: 10×10×20 over the full retort cylinder interior.
 
 **Unconfirmed (`# CONFIRM`):**
-- `fluidized_height: 250.0 mm` — raised from placeholder 180 mm to accommodate the computed bed height of 21.9 cm at 95 g charge. The correct value depends on the maximum operating fluidization zone height from the process specification. If the actual zone is shorter than 21.9 cm, the nominal charge must be reduced or the bed_expansion_ratio revised.
+- `fluidized_height: 250.0 mm` — placeholder for the cylinder-overflow zone above the cone. At 95 g bare_kernel the fluidized bed fits inside the cone (bed top at z ≈ 3.75 cm) and no cylinder overflow occurs, so this parameter is not exercised at the bare-kernel nominal case. It is exercised at higher charge masses (step 7) and at coated stages (ρ_eff ≈ 2.94 g/cm³ → V_bulk ≈ 97 cm³ at 95 g → h_overflow ≈ 3.5 cm in the retort cylinder). The value should be verified against the maximum operating fluidization-zone height from the process specification.
 - `charge_mass_g: 95.0 g` — step specifies "nominal charge"; value is a placeholder pending process documentation.
 - `packing_fraction_fluidized: 0.333` — derived from pf_static (0.50) / bed_expansion_ratio (1.5); bed_expansion_ratio confirmed against process data but marked `# CONFIRM`.
 - All other `# CONFIRM` items inherited from steps 3–4 (`kernel_diameter`, layer thicknesses, densities, graphite density, gas pressure).
