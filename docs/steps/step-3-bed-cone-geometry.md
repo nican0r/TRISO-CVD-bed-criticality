@@ -4,6 +4,11 @@ title: Hybrid staircase-cone bed geometry, two bed states (fluidized/collapsed),
 status: complete
 ---
 
+> **Update (2026-09-16) — production geometry is now `exact_cone_bed` with `use_tiled_bed=True`.**
+> The staircase was originally adopted because packing every TRISO as a distinct `openmc.Cell` made whole-cone packing memory-bound: at 95 g bare_kernel the exact-cone reference required ~225 k unique cells (OOM at 14 GiB Batch limit), and the mass sweep would have scaled it to millions. Slicing the cone into `n_slabs` inscribed cylinders was the workaround.
+>
+> The tiled-bed refactor (commits `8478711`, `76f0e5c`) replaces the per-particle lattice with a single shared tile universe broadcast via a `RectLattice`, so unique-cell count is O(particles_per_tile) — independent of charge mass. Once memory stopped scaling with N, the reason to discretise the cone at all disappeared. Follow-up commits `eec253d` (pf-scaling fix so the tile respects `charge_mass_g`) and `1dbb223` (skip dead pack_spheres in the tiled path) made `exact_cone_bed(..., use_tiled_bed=True)` cheap to build at any mass. See "Transition to exact-cone tiled (production)" below for the quantitative comparison; the staircase content is retained here as the record of what motivated the change.
+
 ## What was implemented
 
 - `furnace/geometry.py` — full implementation replacing the step-3 stub:
@@ -69,20 +74,63 @@ An earlier version of this study used homogenised (smeared) bed materials instea
 
 That study selected n_slabs = 32 based on the δk_disc < σ(2n) criterion. Homogenisation omits TRISO self-shielding and grain-structure effects; the δk_disc comparisons conflate geometry and packing. The study correctly identified the monotonic direction of bias (staircase overestimates k-eff by displacing particles from the cone to the cylinder) but cannot quantify the bias magnitude for real packed geometries.
 
-**Packed-particle study (pending)**
+**Packed-particle study (complete)**
 
-Results from `scripts/run_convergence.py` with real packed beds are pending. The table below will be populated after the AWS Batch sweep completes:
+Sweeps: `step3_convergence` (staircase, seeds 42–46, git `aab5e58`) and `step3_convergence_exactcone_tiled` (exact-cone tiled, seeds 42–46, git `eec253d`). 5 seeds × 4 configurations × 20 000 particles/gen × 300 batches.
 
-| config | mean k-eff | across-seed σ | mean MC σ | pf achieved | pf requested | pf deviation | bias vs exact-cone |
-|--------|------------|---------------|-----------|-------------|--------------|--------------|-------------------|
-| exact_cone | — | — | — | — | 0.500 | — | reference |
-| n=32 | — | — | — | — | 0.500 | — | — |
-| n=16 | — | — | — | — | 0.500 | — | — |
-| n=8  | — | — | — | — | 0.500 | — | — |
+| config     | mean k-eff | across-seed σ | mean MC σ | pf achieved | pf deviation | bias vs exact-cone | \|Δk\|/σ_seed |
+|------------|------------|---------------|-----------|-------------|--------------|--------------------|---------------|
+| exact_cone | 0.024170   | 3×10⁻⁵        | 5×10⁻⁵    | 0.4997      | −0.0003      | reference          | —             |
+| n=32       | 0.026475   | 9.9×10⁻⁵      | 4×10⁻⁵    | 0.4786      | −0.0214      | +2.31×10⁻³         | 22.4          |
+| n=16       | 0.027116   | 4.9×10⁻⁵      | 4×10⁻⁵    | 0.4978      | −0.0022      | +2.95×10⁻³         | 51.5          |
+| n=8        | 0.027453   | 9.3×10⁻⁵      | 5×10⁻⁵    | 0.5000      | −0.0000      | +3.28×10⁻³         | 33.8          |
 
-*Background: full-flood water at 1.0 g/cm³. State: collapsed. Stage: bare_kernel. Charge: 95 g.*
+*Background: full-flood water at 1.0 g/cm³. State: collapsed. Stage: bare_kernel. Charge: 95 g. Data: `results/step3_convergence/1789411575_c1f98c934540/summary.csv` and `results/step3_convergence_exactcone_tiled/1789510193_1b02b68a59d0/summary.csv`.*
 
-**Expected direction of bias**: The staircase mislocates particles from the cone (narrower, closer to graphite wall, higher leakage) to the retort cylinder above, overestimating k-eff. In the flooded case this effect is amplified — the cone is better moderated than the cylinder so displacing particles upward reduces moderation efficiency and raises leakage, pushing k-eff in the non-conservative direction.
+**Findings**
+
+- **Direction confirmed.** All staircase configurations overestimate k-eff versus the exact-cone reference by +2.3 – 3.3 × 10⁻³, matching the a-priori prediction (cone→cylinder relocation raises k under full flood).
+- **None of the staircase configurations meet the convergence criterion** (δk_disc < σ_seed). |Δk|/σ_seed ranges from 22 to 52. n_slabs = 32 selected by the earlier homogenised study does not converge with real packed geometry.
+- **Non-monotone bias vs n.** n=32 has *smaller* raw bias than n=16 despite finer discretisation. The cause is the pf deficit at n=32 (see below), which removes fissile mass and partially compensates the geometric bias. n=32's apparent-closeness is an artefact, not convergence.
+- **n=32 packing fidelity fails.** pf_achieved drops to 0.479 (−4.3 % vs target) and u235 mass varies seed-to-seed (17.03 – 17.19 g). Slab thickness at n=32 (0.119 cm ≈ 2.8 particle diameters) is below the 5 d floor required by the `pack_bed` RSP guard; the guard trips inconsistently across seeds. n=16 (5.6 d) and n=8 (11.2 d) sit at/above the floor.
+- **Slab-thickness floor caps usable n.** For bare_kernel (d ≈ 0.0425 cm) the floor is slab_h ≥ 0.21 cm, i.e. n_slabs ≤ ~18 for this cone. Larger particle stages (buffered, full_triso) raise d and tighten the ceiling further. No finite n_slabs both approaches the exact-cone reference *and* respects the packer floor.
+
+### Transition to exact-cone tiled (production)
+
+**Why the staircase existed.** The original constraint was RAM, not physics. Random `pack_bed` places each TRISO as a distinct `openmc.model.TRISO` (one `openmc.Cell` per particle). At 95 g bare_kernel that is ~225 k unique cells; OpenMC's "Preparing distributed cell instances" phase then materialises each with a per-instance transformation table, and the working set exceeded the 14 GiB AWS Batch container at cell-instance preparation time. Slicing the cone into `n_slabs` inscribed cylinders was the workaround: each slab was packed and lattice-wrapped independently, keeping any single lattice small enough to survive. The convergence study existed to bound the discretisation error that workaround introduced.
+
+**What tiling changed.** The tiled-bed refactor (`furnace/triso.py::tiled_bed`) packs a single ~0.5 cm cubic tile once, wraps it in a `Universe`, and broadcasts *that same universe* across a `RectLattice` covering the bed region. Every lattice position holds the same universe object; unique-cell count is O(particles_per_tile), independent of bed volume:
+
+| charge mass | random exact-cone unique cells | tiled exact-cone unique cells |
+|-------------|-------------------------------|-------------------------------|
+| 95 g        | ~225 k → OOM at 14 GiB        | ~1 600                        |
+| 950 g       | ~2.25 M → infeasible          | ~1 600                        |
+| 3610 g      | ~8.6 M → infeasible           | ~1 600                        |
+
+Once memory stopped scaling with N, the reason to discretise the cone disappeared. `exact_cone_bed(..., use_tiled_bed=True)` builds a single frustum cell whose region is `-cone_surf & +zp_cone_bot & -zp_cone_top_plane` and whose fill is the tiled lattice; the cone surface is the actual cell boundary, so there is no staircase volume error, no annular voids, no per-slab RSP interaction.
+
+**Follow-up fixes required to make tiled exact-cone production-ready.**
+1. **`eec253d` — pf-scaling.** As merged, the tiled branch packed the entire frustum at `pf_static` regardless of charge mass, over-producing particles whenever `V_bulk < V_frustum` (all nominal cases). Fix: cap the tile pf at `target_n × v_sphere / v_frustum` so the total-in-frustum count matches `target_n`. Validated locally at 5 g: n_particles 11 847 → 11 769, pf 0.5000 → 0.4967, |Δk|/σ = 1.68 (within noise).
+2. **`1dbb223` — skip dead pack_spheres.** The rejection-sampling loop only produces per-particle centres for the random path; in the tiled path its output was unused but still ran (~10 min single-thread at 95 g; would exceed the 24 h Batch timeout at high-mass sweep points). Fix: gate the rejection loop and cache read/write on `not use_tiled_bed`. Tiled build now takes ~2 s at 95 g.
+
+**Why exact-cone tiled is more favourable.**
+
+| axis | staircase (n=32) | staircase (n=16) | staircase (n=8) | exact-cone tiled |
+|------|------------------|------------------|-----------------|------------------|
+| geometric error vs true frustum | inscribed under-approx, bed_top = 3.27 cm | 3.33 cm | 3.44 cm | 3.80 cm (exact) |
+| k-eff bias vs exact-cone reference | +2.31 × 10⁻³ (22σ) | +2.95 × 10⁻³ (52σ) | +3.28 × 10⁻³ (34σ) | reference |
+| pf achieved (target 0.500) | 0.4786 | 0.4978 | 0.5000 | 0.4997 |
+| u235 mass consistency across seeds | ±0.08 g (RSP-dependent) | uniform | uniform | uniform |
+| slab-thickness floor / n_slabs ceiling | violates floor at bare_kernel | at floor | above floor | not applicable |
+| unique openmc.Cell count | O(N_particles) per slab, memory-bound at high mass | " | " | O(particles_per_tile), bounded |
+| viable across step-7 mass sweep (up to 3610 g) | no (OOM) | no (OOM) | no (OOM) | yes |
+| single code path across all sweeps (steps 3/5/7/8) | no | no | no | yes |
+| residual physics artefact | discretisation bias + RSP variance | discretisation bias | discretisation bias | tile periodicity (~10⁻⁵ on k-eff, MC-noise level) |
+| build wall time at 95 g | ~5–10 s | ~5 s | ~2 s | ~2 s |
+
+The only new artefact introduced by tiling is the periodic tile pattern at the 0.5 cm scale. Its measured effect on k-eff is at MC-noise level (|Δk|/σ_seed ≈ 1.7 at 5 g), one to two orders of magnitude below the +2–3 × 10⁻³ discretisation bias it replaces. Boundary TRISO clipping at the cone wall (particles whose outer shell pokes past `cone_surf`) affects <1 % of fissile mass and is a standard TRISO-in-lattice approximation; the region constraint on the frustum cell ensures no neutron transport occurs outside the cone.
+
+**Consequence.** Steps 3, 5, 7 and 8 all use `use_exact_cone=True, use_tiled_bed=True, tile_size_cm=0.5` as the production geometry going forward. The staircase (`bed_region`) is retained in `furnace/geometry.py` for reproducibility of legacy results but is no longer used for new sweeps. `n_slabs` remains a parameter of `bed_region` for anyone re-running historical configurations, but the convergence study above resolves it: no value of `n_slabs` is both accurate and safe to use across the full particle-stage / charge-mass sweep matrix.
 
 ## Design decisions
 
