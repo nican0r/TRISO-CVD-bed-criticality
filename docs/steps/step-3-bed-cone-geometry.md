@@ -269,19 +269,6 @@ reproducibility):**
   (h ≈ 0.064 cm ≈ 1.5 d), trips the RSP guard in `pack_bed`, and produces
   the pf deficit visible in the convergence study.
 
-**Superseded homogenised study.** Kept for context on why `n_slabs = 32` was
-the pre-2026 default. Uses homogenised (smeared) bed materials instead of
-explicit TRISO packing; conflates geometry and packing effects and cannot
-quantify the real-geometry bias.
-
-| n_slabs | V_error | ΔV/V_bulk | k_eff (homogenised) | σ | δk_disc |
-|---------|---------|-----------|---------------------|---|---------|
-| 4  | 30.9% | 48.4% | 0.02638 | 4×10⁻⁵ | 2.87×10⁻⁴ |
-| 8  | 16.4% | 25.6% | 0.02609 | 4×10⁻⁵ | 1.56×10⁻⁴ |
-| 16 |  8.7% | 13.6% | 0.02594 | 4×10⁻⁵ | 5.32×10⁻⁵ |
-| 32 |  4.7% |  7.4% | 0.02588 | 4×10⁻⁵ | 3.83×10⁻⁵ |
-| 64 |  2.7% |  4.3% | 0.02585 | 4×10⁻⁵ | — |
-
 ## Assumptions
 
 ### Confirmed
