@@ -488,16 +488,23 @@ def exact_cone_bed(params, state: str, stage: str, background_material,
                    charge_mass_g: float | None = None, seed: int | None = None,
                    z_flood: float | None = None, dry_material=None,
                    *, use_tiled_bed: bool = False, tile_size_cm: float = 0.5) -> dict:
-    """Pack the true frustum by rejection sampling — validation-only reference geometry.
+    """Pack the true frustum without the staircase approximation.
 
-    Does not use the staircase approximation.  Sphere centres are placed in the
-    bounding cylinder (r=r_retort, z in [0, z_cone_top]) by pack_spheres, then
-    any sphere whose body intersects the cone surface or the floor/ceiling planes
-    is discarded.  pf_trial in the bounding cylinder is iterated until the
-    surviving count matches the charge mass to within 0.5 %.
+    Two packing paths are supported:
 
-    The accepted centres are cached under cases/.triso_cache/ with an 'ec_' key
-    prefix distinct from staircase-packing cache keys.
+    * ``use_tiled_bed=False`` (random, reference): rejection-sample sphere centres
+      in the bounding cylinder (r=r_retort, z in [0, z_cone_top]) via pack_spheres,
+      then discard any sphere whose body crosses the cone surface or floor/ceiling
+      planes.  pf_trial is iterated until the surviving count matches the charge
+      mass to within 0.5 %.  Accepted centres are cached under cases/.triso_cache/
+      with an 'ec_' key prefix.  Unique openmc.Cell count scales as O(N_particles),
+      so this path is memory-limited above ~200 k particles.
+
+    * ``use_tiled_bed=True`` (production): pack a single small cubic tile at a
+      density scaled so total-in-frustum ≈ target_n, then broadcast that shared
+      universe across the frustum via a RectLattice.  Unique cell count is
+      O(particles_per_tile), independent of charge mass.  The rejection sampler
+      is not needed in this path.
 
     Returns the same dict structure as bed_region(), with cone_void_cells=[].
     """
@@ -532,69 +539,8 @@ def exact_cone_bed(params, state: str, stage: str, background_material,
 
     target_n = int(round(charge_mass_g / particle_mass_g(stage, params)))
     v_sphere = _shell_vol(outer_r)
-    v_bounding_cyl = math.pi * r_retort ** 2 * z_cone_top
     v_frustum = frustum_volume(r_retort, r_throat,
                                half_angle_deg=dim['cone']['included_angle_deg'] / 2.0)
-
-    cache_key = _exact_cone_cache_key(params, target_n, outer_r, base_seed)
-    cache_path = _CACHE_DIR / f'{cache_key}.npz'
-
-    if cache_path.exists():
-        accepted = np.load(cache_path)['centers']
-    else:
-        bound_cyl  = openmc.ZCylinder(r=r_retort)
-        bound_zbot = openmc.ZPlane(z0=0.0)
-        bound_ztop = openmc.ZPlane(z0=z_cone_top)
-        bounding_region = -bound_cyl & +bound_zbot & -bound_ztop
-
-        # Initial pf_trial: scale up from frustum density to bounding-cylinder density,
-        # correcting for geometric acceptance (~V_frustum/V_cyl) and a 30% wall-depletion margin.
-        acceptance_est = v_frustum / v_bounding_cyl
-        pf_trial = min(
-            target_n * v_sphere / v_bounding_cyl / acceptance_est * 1.3,
-            max_pf * 0.95,
-        )
-
-        accepted = np.empty((0, 3))
-        current_seed = base_seed
-        n_acc = 0
-        for attempt in range(30):
-            all_centers_list = openmc.model.pack_spheres(
-                radius=outer_r,
-                region=bounding_region,
-                pf=pf_trial,
-                seed=current_seed,
-            )
-            if len(all_centers_list) == 0:
-                pf_trial = min(pf_trial * 2.0, max_pf * 0.99)
-                current_seed += 1
-                continue
-
-            all_centers = np.array([[c[0], c[1], c[2]] for c in all_centers_list])
-            mask = _cone_acceptance_mask(all_centers, outer_r, z_apex, tan_theta, z_cone_top)
-            accepted = all_centers[mask]
-            n_acc = len(accepted)
-
-            tol = max(1, int(round(0.005 * target_n)))
-            if n_acc >= target_n - tol:
-                if n_acc > target_n + tol:
-                    rng = np.random.default_rng(base_seed + 9999)
-                    idx = rng.choice(n_acc, target_n, replace=False)
-                    accepted = accepted[idx]
-                break
-
-            # Scale pf_trial proportionally to the shortfall
-            pf_trial = min(pf_trial * (target_n / max(n_acc, 1)) * 1.15, max_pf * 0.99)
-            current_seed += 1
-        else:
-            warnings.warn(
-                f"exact_cone_bed: did not converge after 30 attempts; "
-                f"accepted {n_acc}/{target_n} particles. Using available particles.",
-                stacklevel=2,
-            )
-
-        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        np.savez(cache_path, centers=accepted)
 
     # Build the frustum cell — one bed cell spanning the entire cone interior.
     cone_surf = openmc.ZCone(z0=z_apex, r2=tan_theta ** 2)
@@ -627,6 +573,68 @@ def exact_cone_bed(params, state: str, stage: str, background_material,
         V_actual_solid = n_actual * v_sphere
         pf_achieved = V_actual_solid / V_bulk
     else:
+        v_bounding_cyl = math.pi * r_retort ** 2 * z_cone_top
+
+        cache_key = _exact_cone_cache_key(params, target_n, outer_r, base_seed)
+        cache_path = _CACHE_DIR / f'{cache_key}.npz'
+
+        if cache_path.exists():
+            accepted = np.load(cache_path)['centers']
+        else:
+            bound_cyl  = openmc.ZCylinder(r=r_retort)
+            bound_zbot = openmc.ZPlane(z0=0.0)
+            bound_ztop = openmc.ZPlane(z0=z_cone_top)
+            bounding_region = -bound_cyl & +bound_zbot & -bound_ztop
+
+            # Initial pf_trial: scale up from frustum density to bounding-cylinder density,
+            # correcting for geometric acceptance (~V_frustum/V_cyl) and a 30% wall-depletion margin.
+            acceptance_est = v_frustum / v_bounding_cyl
+            pf_trial = min(
+                target_n * v_sphere / v_bounding_cyl / acceptance_est * 1.3,
+                max_pf * 0.95,
+            )
+
+            accepted = np.empty((0, 3))
+            current_seed = base_seed
+            n_acc = 0
+            for attempt in range(30):
+                all_centers_list = openmc.model.pack_spheres(
+                    radius=outer_r,
+                    region=bounding_region,
+                    pf=pf_trial,
+                    seed=current_seed,
+                )
+                if len(all_centers_list) == 0:
+                    pf_trial = min(pf_trial * 2.0, max_pf * 0.99)
+                    current_seed += 1
+                    continue
+
+                all_centers = np.array([[c[0], c[1], c[2]] for c in all_centers_list])
+                mask = _cone_acceptance_mask(all_centers, outer_r, z_apex, tan_theta, z_cone_top)
+                accepted = all_centers[mask]
+                n_acc = len(accepted)
+
+                tol = max(1, int(round(0.005 * target_n)))
+                if n_acc >= target_n - tol:
+                    if n_acc > target_n + tol:
+                        rng = np.random.default_rng(base_seed + 9999)
+                        idx = rng.choice(n_acc, target_n, replace=False)
+                        accepted = accepted[idx]
+                    break
+
+                # Scale pf_trial proportionally to the shortfall
+                pf_trial = min(pf_trial * (target_n / max(n_acc, 1)) * 1.15, max_pf * 0.99)
+                current_seed += 1
+            else:
+                warnings.warn(
+                    f"exact_cone_bed: did not converge after 30 attempts; "
+                    f"accepted {n_acc}/{target_n} particles. Using available particles.",
+                    stacklevel=2,
+                )
+
+            _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            np.savez(cache_path, centers=accepted)
+
         trisos = [openmc.model.TRISO(outer_r, fill_univ, tuple(c.tolist())) for c in accepted]
         lattice = lattice_bed(
             trisos,
