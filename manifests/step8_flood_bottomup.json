@@ -7,7 +7,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 1.89,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -17,7 +20,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 3.78,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -27,7 +33,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 5.67,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -37,7 +46,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 7.56,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -47,7 +59,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 9.45,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -57,7 +72,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 11.34,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -67,7 +85,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 13.23,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -77,7 +98,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 15.12,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -87,7 +111,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 17.01,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -97,7 +124,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 18.9,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -107,7 +137,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 20.79,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -117,7 +150,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 22.68,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -127,7 +163,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 24.57,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -137,7 +176,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 26.46,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -147,7 +189,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 28.35,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -157,7 +202,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 30.24,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -167,7 +215,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 32.13,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -177,7 +228,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 34.02,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -187,7 +241,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 35.91,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -197,7 +254,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 37.8,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -207,7 +267,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 1.89,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -217,7 +280,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 3.78,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -227,7 +293,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 5.67,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -237,7 +306,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 7.56,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -247,7 +319,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 9.45,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -257,7 +332,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 11.34,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -267,7 +345,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 13.23,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -277,7 +358,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 15.12,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -287,7 +371,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 17.01,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -297,7 +384,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 18.9,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -307,7 +397,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 20.79,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -317,7 +410,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 22.68,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -327,7 +423,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 24.57,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -337,7 +436,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 26.46,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -347,7 +449,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 28.35,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -357,7 +462,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 30.24,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -367,7 +475,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 32.13,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -377,7 +488,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 34.02,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -387,7 +501,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 35.91,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -397,7 +514,10 @@
     "seed": 42,
     "state": "collapsed",
     "z_flood": 37.8,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -407,7 +527,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 1.89,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -417,7 +540,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 3.78,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -427,7 +553,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 5.67,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -437,7 +566,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 7.56,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -447,7 +579,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 9.45,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -457,7 +592,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 11.34,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -467,7 +605,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 13.23,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -477,7 +618,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 15.12,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -487,7 +631,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 17.01,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -497,7 +644,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 18.9,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -507,7 +657,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 20.79,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -517,7 +670,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 22.68,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -527,7 +683,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 24.57,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -537,7 +696,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 26.46,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -547,7 +709,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 28.35,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -557,7 +722,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 30.24,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -567,7 +735,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 32.13,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -577,7 +748,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 34.02,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -587,7 +761,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 35.91,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -597,7 +774,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 37.8,
-    "water_density_gcc": 1.0
+    "water_density_gcc": 1.0,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -607,7 +787,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 1.89,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -617,7 +800,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 3.78,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -627,7 +813,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 5.67,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -637,7 +826,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 7.56,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -647,7 +839,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 9.45,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -657,7 +852,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 11.34,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -667,7 +865,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 13.23,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -677,7 +878,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 15.12,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -687,7 +891,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 17.01,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -697,7 +904,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 18.9,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -707,7 +917,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 20.79,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -717,7 +930,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 22.68,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -727,7 +943,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 24.57,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -737,7 +956,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 26.46,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -747,7 +969,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 28.35,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -757,7 +982,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 30.24,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -767,7 +995,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 32.13,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -777,7 +1008,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 34.02,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -787,7 +1021,10 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 35.91,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "stage": "bare_kernel",
@@ -797,6 +1034,9 @@
     "seed": 42,
     "state": "fluidized",
     "z_flood": 37.8,
-    "water_density_gcc": 0.001
+    "water_density_gcc": 0.001,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   }
 ]

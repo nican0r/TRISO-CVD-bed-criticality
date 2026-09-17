@@ -5,7 +5,10 @@
     "n_particles": 20000,
     "n_inactive": 50,
     "n_active": 250,
-    "seed": 42
+    "seed": 42,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   },
   {
     "state": "collapsed",
@@ -13,6 +16,9 @@
     "n_particles": 20000,
     "n_inactive": 50,
     "n_active": 250,
-    "seed": 42
+    "seed": 42,
+    "use_exact_cone": true,
+    "use_tiled_bed": true,
+    "tile_size_cm": 0.5
   }
 ]
