@@ -115,6 +115,10 @@ def _summarize_statepoint(sp_path: Path, row: dict, stats, wall_seconds: float) 
 
 
 def main() -> int:
+    # Redirect fd 2 (stderr) → fd 1 (stdout) so OpenMC's C++ error output is
+    # captured by CloudWatch (which only tails stdout of the container).
+    os.dup2(sys.stdout.fileno(), 2)
+
     row, idx = _load_row()
     print(f"[entrypoint] array index {idx} row: {json.dumps(row)}", flush=True)
 
