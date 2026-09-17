@@ -346,7 +346,7 @@ Resources:
         MinvCpus: 0
         MaxvCpus: !Ref MaxvCpus
         DesiredvCpus: 0
-        InstanceTypes: [c7i.2xlarge, c6i.2xlarge, c5.2xlarge, m7i.2xlarge, m6i.2xlarge, m5.2xlarge, c7i.4xlarge, c6i.4xlarge, m7i.4xlarge, m6i.4xlarge]
+        InstanceTypes: [c7i.2xlarge, c6i.2xlarge, c5.2xlarge, c5a.2xlarge, c4.2xlarge, m7i.2xlarge, m6i.2xlarge, m5.2xlarge, m5a.2xlarge, m4.2xlarge, c7i.4xlarge, c6i.4xlarge, c5a.4xlarge, c4.4xlarge, m7i.4xlarge, m6i.4xlarge, m5a.4xlarge, m4.4xlarge, r6i.4xlarge, r6i.8xlarge]
         Subnets: !Ref SubnetIds
         SecurityGroupIds: [!Ref EfsSecurityGroup]
         InstanceRole: !GetAtt BatchInstanceProfile.Arn
@@ -383,7 +383,7 @@ Resources:
           - Action: EXIT
             OnReason: "*"
       Timeout:
-        AttemptDurationSeconds: 10800   # 3 h — sweep jobs run well under this
+        AttemptDurationSeconds: 86400   # 24 h — large-mass jobs (1900 g) estimated ~5 h
       ContainerProperties:
         Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EcrRepository}:latest"
         JobRoleArn: !GetAtt BatchJobRole.Arn
@@ -396,6 +396,8 @@ Resources:
         Environment:
           - Name: OPENMC_CROSS_SECTIONS
             Value: /xs/endfb80_hdf5/cross_sections.xml
+          - Name: OMP_NUM_THREADS
+            Value: !Sub "${JobVcpus}"
         Volumes:
           - Name: xs
             EfsVolumeConfiguration:
