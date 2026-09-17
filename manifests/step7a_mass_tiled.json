@@ -1,0 +1,10 @@
+[
+  {"state": "collapsed", "stage": "bare_kernel", "charge_mass_g":   95.0, "n_particles": 20000, "n_inactive": 50, "n_active": 250, "seed": 42, "use_exact_cone": true, "use_tiled_bed": true, "tile_size_cm": 0.5},
+  {"state": "collapsed", "stage": "bare_kernel", "charge_mass_g":  142.5, "n_particles": 20000, "n_inactive": 50, "n_active": 250, "seed": 42, "use_exact_cone": true, "use_tiled_bed": true, "tile_size_cm": 0.5},
+  {"state": "collapsed", "stage": "bare_kernel", "charge_mass_g":  190.0, "n_particles": 20000, "n_inactive": 50, "n_active": 250, "seed": 42, "use_exact_cone": true, "use_tiled_bed": true, "tile_size_cm": 0.5},
+  {"state": "collapsed", "stage": "bare_kernel", "charge_mass_g":  285.0, "n_particles": 20000, "n_inactive": 50, "n_active": 250, "seed": 42, "use_exact_cone": true, "use_tiled_bed": true, "tile_size_cm": 0.5},
+  {"state": "collapsed", "stage": "bare_kernel", "charge_mass_g":  475.0, "n_particles": 20000, "n_inactive": 50, "n_active": 250, "seed": 42, "use_exact_cone": true, "use_tiled_bed": true, "tile_size_cm": 0.5},
+  {"state": "collapsed", "stage": "bare_kernel", "charge_mass_g":  950.0, "n_particles": 20000, "n_inactive": 50, "n_active": 250, "seed": 42, "use_exact_cone": true, "use_tiled_bed": true, "tile_size_cm": 0.5},
+  {"state": "collapsed", "stage": "bare_kernel", "charge_mass_g": 1900.0, "n_particles": 20000, "n_inactive": 50, "n_active": 250, "seed": 42, "use_exact_cone": true, "use_tiled_bed": true, "tile_size_cm": 0.5},
+  {"state": "collapsed", "stage": "bare_kernel", "charge_mass_g": 3610.0, "n_particles": 20000, "n_inactive": 50, "n_active": 250, "seed": 42, "use_exact_cone": true, "use_tiled_bed": true, "tile_size_cm": 0.5}
+]
