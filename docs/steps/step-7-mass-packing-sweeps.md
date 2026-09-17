@@ -103,6 +103,31 @@ The 0.60 → 0.50 change closes a ~13× per-particle runtime gap. Multiplied by 
 
 ---
 
+## Results
+
+Canonical production run: `step7a_mass/1789561375_788a31460970`, git `030835a`, manifest `manifests/step7a_mass_tiled.json`, state=collapsed, stage=bare_kernel, use_exact_cone=True, use_tiled_bed=True, tile_size_cm=0.5, seed=42. 20 000 particles/gen × 300 batches (50 inactive + 250 active).
+
+| charge_mass_g | bed_height_cm | pf_achieved | u₂₃₅ mass (g) | k-eff | σ | k+2σ | wall (s) |
+|---------------|--------------|-------------|---------------|-------|---|------|---------|
+| 95 | 3.212 | 0.4997 | 17.820 | 0.021637 | 1.20×10⁻⁵ | 0.021661 | 207 |
+| 142.5 | 3.751 | 0.4997 | 26.730 | 0.024794 | 1.29×10⁻⁵ | 0.024820 | 238 |
+| 190 | 4.203 | 0.4999 | 35.657 | 0.027437 | 1.40×10⁻⁵ | 0.027465 | 279 |
+| 285 | 5.125 | 0.4999 | 53.477 | 0.032148 | 1.65×10⁻⁵ | 0.032181 | 334 |
+| 475 | 6.968 | 0.4998 | 89.117 | 0.038874 | 1.61×10⁻⁵ | 0.038906 | 370 |
+| 950 | 11.576 | 0.4997 | 178.218 | 0.047674 | 2.26×10⁻⁵ | 0.047719 | 463 |
+| 1900 | 20.792 | 0.4997 | 356.419 | 0.054148 | 2.57×10⁻⁵ | 0.054199 | 517 |
+| 3610 | 37.380 | 0.4997 | 677.181 | 0.057324 | 2.72×10⁻⁵ | 0.057379 | 549 |
+
+**Key findings:**
+- All cases are deeply subcritical: maximum k+2σ = 0.05738 at 3610 g, well below 0.95.
+- k-eff increases monotonically with charge mass and flattens significantly above ~500 g — doubling from 1900 g to 3610 g raises k by only +0.003.
+- Bed geometry transitions from cone-only (≤ 142.5 g; bed top at 3.75 cm ≈ cone top) to cone + retort-cylinder overflow (≥ 190 g; bed top 4.20 cm). Theoretical overflow onset: ~149 g at pf = 0.50 (V_bulk = V_frustum when charge_mass_g = ρ_eff × pf × V_frustum ≈ 10.5 × 0.50 × 28.3 cm³).
+- pf_achieved is 0.4997–0.4999 across all masses — the tiled packing consistently achieves the target without mass-dependent drift.
+
+**Superseded submission:** `step7a_mass/1789162528_6c380c97abd2` (older code revision), superseded. `step7a_mass_tiled/1789499610_533de1774058` (git `76f0e5c`, tiled bed without exact_cone): 6 cases (190–3610 g), k values within ~3×10⁻⁴ of the canonical results, confirming the exact-cone correction had negligible k-eff impact at the mass-sweep geometry. Superseded by the canonical run above.
+
+---
+
 ## Design decisions
 
 - **Multipliers start at 2× (not 1× or 1.5×).** The engineering question is "how much accumulation before mass becomes a concern", not "is nominal safe" — the latter is answered by step 5. The 1× collapsed-bed case is already the step-6 reference run; duplicating it here wastes compute without adding information. 1.5× was also dropped: the first point of interest is a meaningfully larger inventory, not a 50% increment that would be difficult to distinguish from the nominal on the log-x plot.

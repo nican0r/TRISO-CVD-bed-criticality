@@ -87,6 +87,45 @@ Whichever state produces the higher k-eff under flooding is the bounding case; t
 
 ---
 
+## Results
+
+Canonical production run: `step8_flood/1789561376_2144557fdce0`, git `030835a`, manifest `manifests/step8_flood_bottomup.json`, 80 cases (2 states × 20 z_flood levels × 2 water densities), seed 42, use_exact_cone=True, use_tiled_bed=True, tile_size_cm=0.5. 20 000 particles/gen × 300 batches.
+
+**Peak k-eff by scenario (nominally charged 95 g bed):**
+
+| state | water density (g/cm³) | z_flood at peak (cm) | peak k-eff | peak σ | peak k+2σ |
+|-------|----------------------|---------------------|-----------|--------|-----------|
+| collapsed | 1.0 (liquid) | 11.34 | 0.026771 | 4.27×10⁻⁵ | 0.026857 |
+| fluidized | 1.0 (liquid) | 11.34 | 0.024401 | 4.56×10⁻⁵ | 0.024492 |
+| collapsed | 0.001 (vapor) | any | ~0.021601 | ~1.1×10⁻⁵ | ~0.021624 |
+| fluidized | 0.001 (vapor) | any | ~0.016650 | ~9.3×10⁻⁶ | ~0.016669 |
+
+**k-eff vs. flood level — collapsed/liquid (most reactive scenario):**
+
+| z_flood (cm) | k-eff | k+2σ |
+|-------------|-------|------|
+| dry (baseline) | 0.021637 | 0.021661 |
+| 1.89 | 0.022622 | 0.022654 |
+| 3.78 | 0.023463 | 0.023506 |
+| 5.67 | 0.025635 | 0.025712 |
+| 7.56 | 0.026455 | 0.026535 |
+| 9.45 | 0.026617 | 0.026707 |
+| **11.34 ← peak** | **0.026771** | **0.026857** |
+| 13.23 | 0.026743 | 0.026830 |
+| ≥ 15.12 | ~0.02665–0.02671 | ~0.02674–0.02680 (plateau) |
+
+**Key findings:**
+- **All cases are deeply subcritical**: peak k+2σ = 0.02686 (collapsed/liquid), three orders of magnitude below 0.95.
+- **Reactivity peaks at partial fill, not full flood.** For both bed states the peak occurs at z_flood ≈ 11 cm — the water above the bed acts as a neutron reflector, and the gain saturates once the reflector is ~7–8 cm thick above the bed top.
+- **Plateau at z_flood ≥ 13 cm.** Once the flood level exceeds ~13 cm, k-eff is effectively constant (Δk < σ between adjacent levels). The water is too far from the fuel to add additional moderation.
+- **Collapsed state is more reactive than fluidized under liquid flooding** (Δk_peak = +0.0024 at z_flood = 11.34 cm). Higher fissile density per unit bed volume dominates over the higher H/²³⁵U ratio of the fluidized state at this charge mass.
+- **Vapor flooding (0.001 g/cm³) has negligible effect**: k-eff is indistinguishable from the dry baseline at all flood levels for both states. Steam ingress at atmospheric pressure does not contribute to moderation.
+- **Flooding reactivity gain (Δk vs. dry):** +5.1×10⁻³ for collapsed/liquid peak; +7.8×10⁻³ for fluidized/liquid peak (larger fractional gain from the lower dry baseline).
+
+**Note on geometry change vs. earlier step-8 run.** The canonical run uses the state-dependent-bed-top exact-cone tiled geometry (git `030835a`). An earlier run (`1789162535_71748d76bbd2`, git `4276460`) used the staircase geometry and produced similar flood trends but with a ~+2–3×10⁻³ k-eff offset consistent with the staircase bias documented in step 3. The canonical run is the authoritative result.
+
+---
+
 ## Design decisions
 
 - **Both collapsed and fluidized bed states.** Lower fissile density per volume is not always conservative when the system is undermoderated: the fluidized bed has ~2× the H/²³⁵U ratio when flooded (void fraction 0.667 vs 0.500), which can increase k-eff if the collapsed case sits below the moderation optimum. Both states are run and the higher k-eff governs.

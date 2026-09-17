@@ -115,7 +115,24 @@ openmc.run()           1 call
 
 - **Smoke test uses 10 000 particles** — The Watt source spectrum (peak ~1 MeV) has only ~0.2% fission probability per source particle in a sub-centimetre UCO kernel. With the smoke test's 1.15 cm bed, k-eff ≈ 0.0004 (99.98% leakage), so source particles rarely cause secondary fissions. 10 000 particles gives ~20 expected fission events per generation, reliably populating the fission bank. The smoke test confirmed k-eff = 0.0004 ± (not computed, 1 active batch) for the 5 g case.
 
-- **Two bed-state cases (fluidized + collapsed)** — The step brackets the operating and settled bed geometries at the same nominal charge. The fluidized case is the operating condition; the collapsed case represents what happens when fluidization stops and the bed settles into the cone at pf_static (denser, shorter — bed top at z ≈ 3.21 cm vs ≈ 3.75 cm fluidized at 95 g). Comparing k-eff between the two shows the sensitivity of the nominal condition to bed state without changing any material or charge. Preliminary smoke-test transport (2 k particles × 3 active batches, seed 42) gives Δk = k(collapsed) − k(fluidized) ≈ +4.4 × 10⁻³ — collapsed is higher, consistent with less leakage from the more compact configuration in this undermoderated (process-gas) regime. Full-precision production numbers will replace this estimate once step 5 is rerun under the new geometry.
+- **Two bed-state cases (fluidized + collapsed)** — The step brackets the operating and settled bed geometries at the same nominal charge. The fluidized case is the operating condition; the collapsed case represents what happens when fluidization stops and the bed settles into the cone at pf_static (denser, shorter — bed top at z ≈ 3.21 cm vs ≈ 3.75 cm fluidized at 95 g). Comparing k-eff between the two shows the sensitivity of the nominal condition to bed state without changing any material or charge. Production run (see §Results below) gives Δk = k(collapsed) − k(fluidized) = +4.99 × 10⁻³ — collapsed is higher, consistent with less leakage from the more compact configuration in this undermoderated (process-gas) regime.
+
+## Results
+
+Canonical production run: `step5_nominal/1789561375_fa29b5e83832`, git `030835a`, manifests/step5_nominal.json, 20 000 particles/gen × 300 batches (50 inactive + 250 active), seed 42, use_exact_cone=True, use_tiled_bed=True, tile_size_cm=0.5.
+
+| state | bed_height_cm | pf_achieved | u₂₃₅ mass (g) | k-eff | σ | k+2σ | wall (s) |
+|-------|--------------|-------------|---------------|-------|---|------|---------|
+| fluidized | 3.751 | 0.3331 | 17.820 | 0.016647 | 1.20×10⁻⁵ | 0.016672 | 143 |
+| collapsed | 3.212 | 0.4997 | 17.820 | 0.021637 | 1.20×10⁻⁵ | 0.021661 | 206 |
+
+Δk(collapsed − fluidized) = **+4.99×10⁻³** (~70 MC-σ). Both states are deeply subcritical (k+2σ < 0.022 ≪ 0.95) at the 95 g bare-kernel charge in a dry process-gas atmosphere.
+
+**Superseded submissions:**
+- `1789162525_50360a5332de` (git `4276460`, staircase): collapsed k=0.02140, fluidized k=0.01223. Pre-state-dependent-bed-top; staircase geometry; fluidized pf_achieved=0.240 indicates a different params state. Superseded.
+- `1789558400_fa29b5e83832` (git `91b0135`, old mass-conserving-pf tiled): collapsed=fluidized k=0.01620 — both states returned identical geometry because the old pf-scaling fix filled the entire frustum at a reduced tile density regardless of state. Superseded by the state-dependent bed-top fix.
+
+---
 
 ## Assumptions
 
